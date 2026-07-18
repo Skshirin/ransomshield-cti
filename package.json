@@ -1,0 +1,14 @@
+{
+  "name": "ransomware-cti-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ML-Based Ransomware Detection with Blockchain-Based CTI Sharing",
+  "workspaces": [
+    "apps/web",
+    "apps/backend",
+    "blockchain",
+    "packages/shared-types"
+  ],
+  "scripts": {},
+  "license": "UNLICENSED"
+}
