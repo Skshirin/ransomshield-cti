@@ -7,6 +7,7 @@ import { env } from "./config/env";
 import healthRoutes from "./routes/health.routes";
 import authRoutes from "./routes/auth.routes";
 import endpointRoutes from "./routes/endpoint.routes";
+import auditLogRoutes from "./routes/auditLog.routes";
 import { errorMiddleware } from "./middleware/error.middleware";
 
 export function createApp(): Application {
@@ -22,6 +23,7 @@ export function createApp(): Application {
   app.use("/api/health", healthRoutes);
   app.use("/api/auth", authRoutes);
   app.use("/api/endpoints", endpointRoutes);
+  app.use("/api/audit-logs", auditLogRoutes);
 
   app.use(errorMiddleware);
 
