@@ -1,9 +1,6 @@
 import { Router } from "express";
 import { register, login, refresh, logout } from "../controllers/auth.controller";
-
-function asyncHandler(fn: Function) {
-  return (req: any, res: any, next: any) => Promise.resolve(fn(req, res, next)).catch(next);
-}
+import { asyncHandler } from "../utils/asyncHandler";
 
 const router = Router();
 
