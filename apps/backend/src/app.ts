@@ -10,9 +10,20 @@ import endpointRoutes from "./routes/endpoint.routes";
 import auditLogRoutes from "./routes/auditLog.routes";
 import detectionRoutes from "./routes/detection.routes";
 import { errorMiddleware } from "./middleware/error.middleware";
+import rateLimit from "express-rate-limit";
+
 
 export function createApp(): Application {
   const app = express();
+  
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  app.use(limiter);
 
   app.use(helmet());
   app.use(cors({ origin: env.corsOrigin, credentials: true }));

@@ -1,0 +1,17 @@
+{
+  "name": "@ransomware-cti/blockchain",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:amoy": "hardhat run scripts/deploy.ts --network amoy"
+  },
+  "devDependencies": {
+    "hardhat": "^3.11.0",
+    "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.7",
+    "dotenv": "^16.4.5",
+    "typescript": "^5.5.4"
+  }
+}
