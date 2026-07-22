@@ -1,0 +1,22 @@
+{
+  "changelists": [
+    {
+      "name": "Default",
+      "files": [
+        "apps/backend/package.json",
+        "package-lock.json",
+        "apps/backend/src/abi/CTIRegistry.json",
+        ".vscode/changelists.json",
+        "apps/backend/src/config/env.ts",
+        "apps/backend/src/config/blockchain.ts",
+        "apps/backend/src/services/blockchain.service.ts",
+        "apps/backend/src/models/ctiReport.model.ts",
+        "apps/backend/src/services/cti.service.ts",
+        "apps/backend/src/controllers/cti.controller.ts",
+        "apps/backend/src/routes/cti.routes.ts",
+        "apps/backend/src/app.ts"
+      ]
+    }
+  ],
+  "active": "Default"
+}

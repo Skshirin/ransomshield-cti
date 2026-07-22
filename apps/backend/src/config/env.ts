@@ -21,4 +21,9 @@ export const env = {
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
   },
   mlServiceApiKey: requireEnv("ML_SERVICE_API_KEY"),
+  blockchain: {
+    rpcUrl: requireEnv("POLYGON_AMOY_RPC_URL"),
+    privateKey: requireEnv("BLOCKCHAIN_PRIVATE_KEY"),
+    contractAddress: requireEnv("CTI_REGISTRY_CONTRACT_ADDRESS"),
+  },
 };
