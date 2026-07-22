@@ -11,3 +11,7 @@ venv/
 .venv/
 *.log
 .DS_Store
+apps/ml-service/data/
+apps/ml-service/app/ml/*.pkl
+apps/ml-service/app/ml/*.json
+apps/ml-service/venv/

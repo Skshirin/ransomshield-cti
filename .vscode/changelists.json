@@ -4,14 +4,18 @@
       "name": "Default",
       "files": [
         "apps/ml-service/requirements.txt",
-        ".vscode/changelists.json",
-        "apps/ml-service/app/config.py",
-        "apps/ml-service/app/schemas.py",
-        "apps/ml-service/app/routers/health.py",
-        "apps/ml-service/app/routers/predict.py",
-        "apps/ml-service/app/main.py",
         "apps/ml-service/apps/ml-service/app/__init__.py",
-        "apps/ml-service/apps/ml-service/app/routers/__init__.py"
+        "apps/ml-service/apps/ml-service/app/routers/__init__.py",
+        ".gitignore",
+        "apps/ml-service/app/__init__.py",
+        "apps/ml-service/app/routers/__init__.py",
+        ".vscode/changelists.json",
+        "apps/ml-service/app/ml/__init__.py",
+        "apps/ml-service/app/ml/model_loader.py",
+        "apps/ml-service/train_model.py",
+        "apps/ml-service/app/schemas.py",
+        "apps/ml-service/app/routers/predict.py",
+        "apps/ml-service/app/main.py"
       ]
     }
   ],
