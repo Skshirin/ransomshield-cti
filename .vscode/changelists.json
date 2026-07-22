@@ -3,18 +3,15 @@
     {
       "name": "Default",
       "files": [
-        "apps/backend/package.json",
-        "package-lock.json",
-        "apps/backend/src/abi/CTIRegistry.json",
+        "apps/ml-service/requirements.txt",
         ".vscode/changelists.json",
-        "apps/backend/src/config/env.ts",
-        "apps/backend/src/config/blockchain.ts",
-        "apps/backend/src/services/blockchain.service.ts",
-        "apps/backend/src/models/ctiReport.model.ts",
-        "apps/backend/src/services/cti.service.ts",
-        "apps/backend/src/controllers/cti.controller.ts",
-        "apps/backend/src/routes/cti.routes.ts",
-        "apps/backend/src/app.ts"
+        "apps/ml-service/app/config.py",
+        "apps/ml-service/app/schemas.py",
+        "apps/ml-service/app/routers/health.py",
+        "apps/ml-service/app/routers/predict.py",
+        "apps/ml-service/app/main.py",
+        "apps/ml-service/apps/ml-service/app/__init__.py",
+        "apps/ml-service/apps/ml-service/app/routers/__init__.py"
       ]
     }
   ],
