@@ -1,4 +1,5 @@
 import os
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -9,3 +10,6 @@ BACKEND_API_KEY = os.getenv("BACKEND_API_KEY", "")
 ORGANIZATION_ID = os.getenv("ORGANIZATION_ID", "")
 ENDPOINT_ID = os.getenv("ENDPOINT_ID", "")
 WATCH_DIRECTORY = os.getenv("WATCH_DIRECTORY", "C:\\Users\\Public\\Documents")
+
+# Automatically report detections to backend
+AUTO_REPORT_DETECTIONS = os.getenv("AUTO_REPORT_DETECTIONS", "true").lower() == "true"

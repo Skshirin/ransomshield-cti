@@ -1,0 +1,32 @@
+<Sysmon schemaversion="4.50">
+  <EventFiltering>
+    <!-- Event ID 1: Process Create - log everything. Ransomware can be
+         launched by literally any process, so we don't filter this one. -->
+    <ProcessCreate onmatch="exclude">
+    </ProcessCreate>
+
+    <!-- Event ID 11: File Create - exclude known-noisy, low-risk paths
+         (browser caches, package manager caches, source control internals)
+         to keep volume manageable. Ransomware activity almost never
+         originates from these specific paths, and excluding them cuts out
+         a large fraction of harmless background noise. -->
+    <FileCreate onmatch="exclude">
+      <TargetFilename condition="contains">\AppData\Local\Google\Chrome\User Data\Default\Cache</TargetFilename>
+      <TargetFilename condition="contains">\AppData\Local\Microsoft\Edge\User Data\Default\Cache</TargetFilename>
+      <TargetFilename condition="contains">\node_modules\</TargetFilename>
+      <TargetFilename condition="contains">\.git\</TargetFilename>
+      <TargetFilename condition="contains">\AppData\Local\Temp\pip-</TargetFilename>
+      <TargetFilename condition="contains">\AppData\Local\npm-cache</TargetFilename>
+    </FileCreate>
+
+    <!-- Event ID 13: Registry Value Set - restrict to persistence-relevant
+         keys (Run/RunOnce for auto-start persistence, Services for driver/
+         service installs). Full registry monitoring is extremely high
+         volume and mostly irrelevant to ransomware detection. -->
+    <RegistryEvent onmatch="include">
+      <EventType condition="is">SetValue</EventType>
+      <TargetObject condition="contains">\CurrentVersion\Run</TargetObject>
+      <TargetObject condition="contains">\Services\</TargetObject>
+    </RegistryEvent>
+  </EventFiltering>
+</Sysmon>

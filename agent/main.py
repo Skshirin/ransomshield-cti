@@ -1,16 +1,10 @@
-import threading
-from config import WATCH_DIRECTORY
-from file_watcher import start_file_watcher
-from process_watcher import start_process_watcher
+from sysmon_reader import start_sysmon_reader
 
 
 def main():
-    print("[agent] Starting Ransomware Detection Agent...")
-
-    file_thread = threading.Thread(target=start_file_watcher, args=(WATCH_DIRECTORY,), daemon=True)
-    file_thread.start()
-
-    start_process_watcher()
+    print("[agent] Starting Ransomware Detection Agent (Sysmon-driven)...")
+    print("[agent] NOTE: this process must run as Administrator to read the Sysmon event log.")
+    start_sysmon_reader()
 
 
 if __name__ == "__main__":
