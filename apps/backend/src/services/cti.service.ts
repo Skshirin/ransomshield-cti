@@ -6,6 +6,7 @@ import {
   publishHashToBlockchain,
   computeReportContentHash,
 } from "./blockchain.service";
+import { emitToOrganization } from "../websocket/socket";
 
 function buildIndicatorsOfCompromise(indicators: { type: string; description: string }[]): string[] {
   return indicators.map((i) => `${i.type}: ${i.description}`);
@@ -107,6 +108,8 @@ export async function publishCTIReport(organizationId: string, reportId: string)
   report.verificationStatus = "VERIFIED";
   report.publishedAt = new Date();
   await report.save();
+
+  emitToOrganization(organizationId, "cti:published", report);
 
   return report;
 }

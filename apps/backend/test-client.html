@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WebSocket Test Client</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body style="font-family: monospace; padding: 20px;">
+  <h2>Ransomware CTI Platform — WebSocket Test</h2>
+  <p>1. Paste a fresh access token below, click Connect.</p>
+  <p>2. Trigger a detection/CTI publish via PowerShell in another window.</p>
+  <p>3. Watch events appear here live.</p>
+
+  <input id="tokenInput" type="text" placeholder="Paste access token here" style="width: 500px;" />
+  <button onclick="connect()">Connect</button>
+  <div id="status" style="margin-top: 10px; font-weight: bold;">Not connected</div>
+
+  <h3>Events received:</h3>
+  <pre id="log" style="background: #111; color: #0f0; padding: 15px; height: 400px; overflow-y: scroll;"></pre>
+
+  <script>
+    function connect() {
+      const token = document.getElementById('tokenInput').value;
+      const socket = io('http://localhost:4000', {
+        auth: { token }
+      });
+
+      const statusEl = document.getElementById('status');
+      const logEl = document.getElementById('log');
+
+      function log(msg) {
+        logEl.textContent += msg + '\n\n';
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      socket.on('connect', () => {
+        statusEl.textContent = 'Connected: ' + socket.id;
+        statusEl.style.color = 'green';
+        log('[connected]');
+      });
+
+      socket.on('connect_error', (err) => {
+        statusEl.textContent = 'Connection error: ' + err.message;
+        statusEl.style.color = 'red';
+        log('[connect_error] ' + err.message);
+      });
+
+      socket.on('detection:new', (data) => {
+        log('[detection:new]\n' + JSON.stringify(data, null, 2));
+      });
+
+      socket.on('detection:resolved', (data) => {
+        log('[detection:resolved]\n' + JSON.stringify(data, null, 2));
+      });
+
+      socket.on('cti:published', (data) => {
+        log('[cti:published]\n' + JSON.stringify(data, null, 2));
+      });
+    }
+  </script>
+</body>
+</html>

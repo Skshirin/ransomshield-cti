@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { DetectionModel, severityFromRiskScore, BehaviourIndicator } from "../models/detection.model";
 import { EndpointModel } from "../models/endpoint.model";
 import { AppError } from "../middleware/error.middleware";
+import { emitToOrganization } from "../websocket/socket";
 
 interface CreateDetectionInput {
   organizationId: string;
@@ -38,6 +39,8 @@ export async function createDetection(input: CreateDetectionInput) {
   // matches the Dashboard's donut chart and Endpoint Management status column.
   endpoint.status = "AT_RISK";
   await endpoint.save();
+
+  emitToOrganization(input.organizationId, "detection:new", detection);
 
   return detection;
 }
@@ -107,6 +110,8 @@ export async function resolveDetection(
   if (!stillAtRisk) {
     await EndpointModel.findByIdAndUpdate(detection.endpointId, { status: "ONLINE" });
   }
+
+  emitToOrganization(organizationId, "detection:resolved", detection);
 
   return detection;
 }
