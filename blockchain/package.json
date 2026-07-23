@@ -9,9 +9,12 @@
     "deploy:amoy": "hardhat run scripts/deploy.ts --network amoy"
   },
   "devDependencies": {
-    "hardhat": "^3.11.0",
     "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.7",
     "dotenv": "^16.4.5",
+    "hardhat": "^3.11.0",
     "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.6.1"
   }
 }

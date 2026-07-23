@@ -1,13 +1,20 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.28;
+
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @title CTIRegistry
 /// @notice Tamper-proof notice board for Cyber Threat Intelligence report
 /// hashes. This contract does NOT detect ransomware and does NOT store
-/// sensitive report content — only a SHA-256 content hash plus minimal
+/// sensitive report content - only a SHA-256 content hash plus minimal
 /// non-sensitive metadata, so any organization can verify a report they
 /// received has not been altered since it was published.
-contract CTIRegistry {
+/// @dev Only the contract owner (the backend's wallet) may publish new
+/// records. Without this restriction, any external wallet could call
+/// publishCTI() directly and inject fake or spam entries onto the ledger,
+/// bypassing all of the backend's validation, auditing, and organization
+/// scoping entirely.
+contract CTIRegistry is Ownable {
     struct CTIRecord {
         bytes32 contentHash;
         address publisher;
@@ -15,8 +22,6 @@ contract CTIRegistry {
         string attackType;
     }
 
-    // reportId (an off-chain MongoDB _id, passed in as a string→bytes32 hash)
-    // maps to its on-chain record.
     mapping(bytes32 => CTIRecord) private records;
 
     event CTIPublished(
@@ -27,13 +32,16 @@ contract CTIRegistry {
         string attackType
     );
 
-    /// @notice Publish a new CTI report's hash. Reverts if this reportKey
+    constructor(address initialOwner) Ownable(initialOwner) {}
+
+    /// @notice Publish a new CTI report's hash. Only callable by the
+    /// contract owner (the backend's wallet). Reverts if this reportKey
     /// was already published, since records must be immutable once written.
     function publishCTI(
         bytes32 reportKey,
         bytes32 contentHash,
         string calldata attackType
-    ) external {
+    ) external onlyOwner {
         require(records[reportKey].timestamp == 0, "CTIRegistry: report already published");
 
         records[reportKey] = CTIRecord({
@@ -47,7 +55,8 @@ contract CTIRegistry {
     }
 
     /// @notice Verify a given contentHash still matches what's on-chain for
-    /// a reportKey. Used by the "Blockchain Verification" screen.
+    /// a reportKey. Publicly callable - anyone should be able to verify
+    /// integrity, only publishing is restricted.
     function verifyCTI(bytes32 reportKey, bytes32 contentHash) external view returns (bool matches) {
         return records[reportKey].contentHash == contentHash && records[reportKey].timestamp != 0;
     }
