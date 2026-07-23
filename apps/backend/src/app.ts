@@ -11,6 +11,7 @@ import endpointRoutes from "./routes/endpoint.routes";
 import auditLogRoutes from "./routes/auditLog.routes";
 import detectionRoutes from "./routes/detection.routes";
 import ctiRoutes from "./routes/cti.routes";
+import userRoutes from "./routes/user.routes";
 import { errorMiddleware } from "./middleware/error.middleware";
 
 export function createApp(): Application {
@@ -37,6 +38,7 @@ export function createApp(): Application {
   app.use("/api/audit-logs", auditLogRoutes);
   app.use("/api/detections", detectionRoutes);
   app.use("/api/cti", ctiRoutes);
+  app.use("/api/users", userRoutes);
 
   app.use(errorMiddleware);
 
