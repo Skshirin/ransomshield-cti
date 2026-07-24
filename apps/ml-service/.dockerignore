@@ -1,0 +1,7 @@
+venv
+data
+app/ml/*.pkl
+app/ml/*.json
+__pycache__
+*.pyc
+.env

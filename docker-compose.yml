@@ -9,6 +9,45 @@ services:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ml-service:
+    build:
+      context: ./apps/ml-service
+      dockerfile: Dockerfile
+    container_name: ransomware-cti-ml-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount the trained model from the host - it's gitignored and often
+      # retrained locally, so we don't bake it into the image.
+      - ./apps/ml-service/app/ml/model.pkl:/app/app/ml/model.pkl:ro
+      - ./apps/ml-service/app/ml/model_metadata.json:/app/app/ml/model_metadata.json:ro
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: ransomware-cti-backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    env_file:
+      - ./apps/backend/.env
+    environment:
+      # Overrides for container networking - inside Docker's network,
+      # "mongo" and "ml-service" resolve to the other containers by
+      # service name, not localhost. env_file above supplies everything
+      # else (JWT secrets, blockchain keys, etc.) unchanged.
+      MONGO_URI: mongodb://mongo:27017/ransomware_cti
 
 volumes:
   mongo_data:
