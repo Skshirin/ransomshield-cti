@@ -28,7 +28,7 @@ export async function addEndpoint(req: AuthenticatedRequest, res: Response) {
     endpoint,
     activationToken,
     installInstructions:
-      "Run the downloaded installer on the target Windows machine and paste this activation token when prompted. This token expires in 24 hours.",
+      "1. On the target Windows machine, set ACTIVATION_TOKEN=<token> in the agent's .env file. 2. Run the agent as Administrator: python main.py. 3. The endpoint will appear as ONLINE within seconds of activation.",
   });
 }
 
