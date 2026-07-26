@@ -9,7 +9,7 @@ BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://localhost:4000")
 BACKEND_API_KEY = os.getenv("BACKEND_API_KEY", "")
 ORGANIZATION_ID = os.getenv("ORGANIZATION_ID", "")
 ENDPOINT_ID = os.getenv("ENDPOINT_ID", "")
+ACTIVATION_TOKEN = os.getenv("ACTIVATION_TOKEN", "")
 WATCH_DIRECTORY = os.getenv("WATCH_DIRECTORY", "C:\\Users\\Public\\Documents")
 
-# Automatically report detections to backend
-AUTO_REPORT_DETECTIONS = os.getenv("AUTO_REPORT_DETECTIONS", "true").lower() == "true"
+AUTO_REPORT_DETECTIONS = os.getenv("AUTO_REPORT_DETECTIONS", "false").lower() == "true"

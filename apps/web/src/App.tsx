@@ -1,0 +1,478 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { AppContext } from '@/lib/context'
+import type { AppContextType } from '@/lib/context'
+import type { CurrentUser, Endpoint, Detection, CTIReport, TeamUser, AuditLog, Toast, UserRole } from '@/lib/types'
+import {
+  apiGet,
+  apiPost,
+  apiPatch,
+  apiDelete,
+  setAccessToken,
+  getAccessToken,
+  registerAuthFailureHandler,
+  registerTokenRefreshHandler,
+  restoreSession,
+} from '@/lib/api'
+import { initSocket, disconnectSocket, getSocket } from '@/lib/socket'
+import Layout from '@/components/Layout'
+import { ToastItem } from '@/components/ui'
+
+import LoginPage from '@/pages/Login'
+import RegisterPage from '@/pages/Register'
+import DashboardPage from '@/pages/Dashboard'
+import EndpointsPage from '@/pages/Endpoints'
+import EndpointDetailPage from '@/pages/EndpointDetail'
+import DetectionsPage from '@/pages/Detections'
+import DetectionDetailPage from '@/pages/DetectionDetail'
+import CTICenterPage from '@/pages/CTICenter'
+import CTIDraftEditorPage from '@/pages/CTIDraftEditor'
+import BlockchainVerificationPage from '@/pages/BlockchainVerification'
+import AuditLogsPage from '@/pages/AuditLogs'
+import TeamPage from '@/pages/Team'
+import SettingsPage from '@/pages/Settings'
+
+// ─── Async list state helper ──────────────────────────────────────────────────
+
+interface ListState<T> {
+  data: T[]
+  loading: boolean
+  error: string | null
+}
+
+function initList<T>(): ListState<T> {
+  return { data: [], loading: false, error: null }
+}
+
+export default function App() {
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
+  const [isInitializing, setIsInitializing] = useState(true)
+  const [page, setPage] = useState('login')
+  const [pageParams, setPageParams] = useState<Record<string, string>>({})
+  const [toasts, setToasts] = useState<Toast[]>([])
+
+  // Data states
+  const [endpointState, setEndpointState] = useState<ListState<Endpoint>>(initList())
+  const [detectionState, setDetectionState] = useState<ListState<Detection>>(initList())
+  const [ctiState, setCtiState] = useState<ListState<CTIReport>>(initList())
+  const [teamState, setTeamState] = useState<ListState<TeamUser>>(initList())
+  const [auditState, setAuditState] = useState<ListState<AuditLog>>(initList())
+  const [feedState, setFeedState] = useState<ListState<CTIReport>>(initList())
+
+  // Keep a ref to currentUser for use in socket callbacks without stale closure
+  const currentUserRef = useRef<CurrentUser | null>(null)
+  currentUserRef.current = currentUser
+
+  // ─── Navigation ──────────────────────────────────────────────────────────────
+
+  const navigate = useCallback((newPage: string, params: Record<string, string> = {}) => {
+    setPage(newPage)
+    setPageParams(params)
+    if (newPage !== 'login' && newPage !== 'register') {
+      localStorage.setItem('ransomshield_saved_page', newPage)
+    }
+  }, [])
+
+  // ─── Toasts ───────────────────────────────────────────────────────────────────
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }, [])
+
+  const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+    const id = Math.random().toString(36).slice(2)
+    setToasts(prev => [...prev, { id, message, type }])
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id))
+    }, 4500)
+  }, [])
+
+  // ─── Data fetchers ────────────────────────────────────────────────────────────
+
+  const fetchEndpoints = useCallback(async () => {
+    setEndpointState(s => ({ ...s, loading: true, error: null }))
+    try {
+      const data = await apiGet<{ endpoints: Endpoint[] }>('/endpoints')
+      setEndpointState({ data: data.endpoints, loading: false, error: null })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to load endpoints'
+      setEndpointState(s => ({ ...s, loading: false, error: msg }))
+    }
+  }, [])
+
+  const fetchDetections = useCallback(async () => {
+    setDetectionState(s => ({ ...s, loading: true, error: null }))
+    try {
+      const data = await apiGet<{ detections: Detection[] }>('/detections')
+      setDetectionState({ data: data.detections, loading: false, error: null })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to load detections'
+      setDetectionState(s => ({ ...s, loading: false, error: msg }))
+    }
+  }, [])
+
+  const fetchCTI = useCallback(async () => {
+    setCtiState(s => ({ ...s, loading: true, error: null }))
+    try {
+      const [myData, feedData] = await Promise.all([
+        apiGet<{ reports: CTIReport[] }>('/cti'),
+        apiGet<{ reports: CTIReport[] }>('/cti/feed'),
+      ])
+      setCtiState({ data: myData.reports, loading: false, error: null })
+      setFeedState({ data: feedData.reports, loading: false, error: null })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to load CTI reports'
+      setCtiState(s => ({ ...s, loading: false, error: msg }))
+      setFeedState(s => ({ ...s, loading: false, error: msg }))
+    }
+  }, [])
+
+  const fetchTeam = useCallback(async () => {
+    setTeamState(s => ({ ...s, loading: true, error: null }))
+    try {
+      const data = await apiGet<{ users: TeamUser[] }>('/users')
+      setTeamState({ data: data.users, loading: false, error: null })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to load team'
+      setTeamState(s => ({ ...s, loading: false, error: msg }))
+    }
+  }, [])
+
+  const fetchAuditLogs = useCallback(async () => {
+    setAuditState(s => ({ ...s, loading: true, error: null }))
+    try {
+      const data = await apiGet<{ logs: AuditLog[] }>('/audit-logs')
+      setAuditState({ data: data.logs, loading: false, error: null })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to load audit logs'
+      setAuditState(s => ({ ...s, loading: false, error: msg }))
+    }
+  }, [])
+
+  // ─── Auth ─────────────────────────────────────────────────────────────────────
+
+  const handleAuthFailure = useCallback(() => {
+    setCurrentUser(null)
+    setAccessToken(null)
+    disconnectSocket()
+    localStorage.removeItem('ransomshield_saved_page')
+    navigate('login')
+    showToast('Your session has expired. Please sign in again.', 'error')
+  }, [navigate, showToast])
+
+  const handleTokenRefreshed = useCallback((newToken: string) => {
+    initSocket(newToken)
+  }, [])
+
+  useEffect(() => {
+    registerAuthFailureHandler(handleAuthFailure)
+    registerTokenRefreshHandler(handleTokenRefreshed)
+  }, [handleAuthFailure, handleTokenRefreshed])
+
+
+  // ─── Socket.IO event listeners ────────────────────────────────────────────────
+
+  const setupSocketListeners = useCallback(() => {
+    const socket = getSocket()
+    if (!socket) return
+
+    // Remove old listeners first to avoid duplicates on reconnect
+    socket.off('detection:new')
+    socket.off('detection:resolved')
+    socket.off('cti:published')
+
+    socket.on('detection:new', (detection: Detection) => {
+      setDetectionState(s => ({ ...s, data: [detection, ...s.data] }))
+      showToast(
+        `New ${detection.severity} detection on ${detection.endpointName} — Risk score: ${detection.riskScore}`,
+        detection.severity === 'CRITICAL' || detection.severity === 'HIGH' ? 'error' : 'info',
+      )
+    })
+
+    socket.on('detection:resolved', (detection: Detection) => {
+      setDetectionState(s => ({
+        ...s,
+        data: s.data.map(d => (d._id === detection._id ? detection : d)),
+      }))
+      showToast(
+        `Detection on ${detection.endpointName} marked as ${detection.status === 'FALSE_POSITIVE' ? 'False Positive' : 'Resolved'}`,
+        'success',
+      )
+    })
+
+    socket.on('cti:published', (report: CTIReport) => {
+      setCtiState(s => ({
+        ...s,
+        data: s.data.map(r => (r._id === report._id ? report : r)),
+      }))
+      showToast('CTI Report published to blockchain and verified', 'success')
+    })
+  }, [showToast])
+
+  useEffect(() => {
+    // Attempt to restore session on mount
+    restoreSession().then(async user => {
+      if (user) {
+        setCurrentUser(user)
+        const socket = initSocket(getAccessToken()!)
+        
+        await Promise.all([
+          fetchEndpoints(),
+          fetchDetections(),
+          fetchCTI(),
+          fetchTeam(),
+          ...(user.role === 'ORG_ADMIN' ? [fetchAuditLogs()] : []),
+        ])
+        
+        socket.on('connect', () => setupSocketListeners())
+        setupSocketListeners()
+        const savedPage = localStorage.getItem('ransomshield_saved_page')
+        const targetPage = savedPage && savedPage !== 'login' && savedPage !== 'register' ? savedPage : 'dashboard'
+        navigate(targetPage)
+      }
+      setIsInitializing(false)
+    })
+  }, [fetchEndpoints, fetchDetections, fetchCTI, fetchTeam, fetchAuditLogs, setupSocketListeners, navigate])
+
+
+  const login = useCallback(async (email: string, password: string) => {
+    const data = await apiPost<{ accessToken: string; user: CurrentUser }>('/auth/login', { email, password })
+    setAccessToken(data.accessToken)
+    setCurrentUser(data.user)
+    navigate('dashboard')
+
+    // Initialize socket
+    const socket = initSocket(data.accessToken)
+
+    // Fetch all data in parallel after login
+    await Promise.all([
+      fetchEndpoints(),
+      fetchDetections(),
+      fetchCTI(),
+      fetchTeam(),
+      // Only fetch admin-gated resources if ORG_ADMIN
+      ...(data.user.role === 'ORG_ADMIN' ? [fetchAuditLogs()] : []),
+    ])
+
+    // Set up socket listeners after data is loaded
+    socket.on('connect', () => setupSocketListeners())
+    setupSocketListeners()
+
+    showToast(`Welcome back, ${data.user.name.split(' ')[0]}!`, 'success')
+  }, [navigate, fetchEndpoints, fetchDetections, fetchCTI, fetchTeam, fetchAuditLogs, showToast, setupSocketListeners])
+
+  const logout = useCallback(async () => {
+    try {
+      await apiPost('/auth/logout')
+    } catch {
+      // Best-effort
+    }
+    setAccessToken(null)
+    disconnectSocket()
+    setCurrentUser(null)
+    localStorage.removeItem('ransomshield_saved_page')
+    // Reset all data states
+    setEndpointState(initList())
+    setDetectionState(initList())
+    setCtiState(initList())
+    setTeamState(initList())
+    setAuditState(initList())
+    setFeedState(initList())
+    navigate('login')
+  }, [navigate])
+
+  // ─── Endpoint mutations ───────────────────────────────────────────────────────
+
+  const addEndpoint = useCallback(async (name: string) => {
+    const data = await apiPost<{ endpoint: Endpoint; activationToken: string; installInstructions: string }>('/endpoints', { name })
+    setEndpointState(s => ({ ...s, data: [...s.data, data.endpoint] }))
+    showToast(`Endpoint "${name}" added successfully`, 'success')
+    return { endpoint: data.endpoint, activationToken: data.activationToken, installInstructions: data.installInstructions }
+  }, [showToast])
+
+  const removeEndpoint = useCallback(async (id: string) => {
+    await apiDelete(`/endpoints/${id}`)
+    setEndpointState(s => ({ ...s, data: s.data.filter(e => e._id !== id) }))
+    showToast('Endpoint removed', 'success')
+  }, [showToast])
+
+  // ─── Detection mutations ──────────────────────────────────────────────────────
+
+  const resolveDetection = useCallback(async (id: string, outcome: 'RESOLVED' | 'FALSE_POSITIVE') => {
+    const data = await apiPatch<{ detection: Detection }>(`/detections/${id}/resolve`, { outcome })
+    setDetectionState(s => ({
+      ...s,
+      data: s.data.map(d => (d._id === id ? data.detection : d)),
+    }))
+    showToast(`Detection marked as ${outcome === 'FALSE_POSITIVE' ? 'False Positive' : 'Resolved'}`, 'success')
+  }, [showToast])
+
+  // ─── CTI mutations ────────────────────────────────────────────────────────────
+
+  const generateCTI = useCallback(async (detectionId: string): Promise<CTIReport> => {
+    const data = await apiPost<{ report: CTIReport }>('/cti', { detectionId })
+    setCtiState(s => ({ ...s, data: [data.report, ...s.data] }))
+    showToast('CTI draft generated from detection', 'success')
+    return data.report
+  }, [showToast])
+
+  const updateCTIDraft = useCallback(async (
+    id: string,
+    body: Partial<Pick<CTIReport, 'attackSummary' | 'analystNotes' | 'indicatorsOfCompromise' | 'recommendedActions'>>,
+  ) => {
+    const data = await apiPatch<{ report: CTIReport }>(`/cti/${id}`, body)
+    setCtiState(s => ({
+      ...s,
+      data: s.data.map(r => (r._id === id ? data.report : r)),
+    }))
+    showToast('Draft saved', 'success')
+  }, [showToast])
+
+  const publishCTI = useCallback(async (id: string) => {
+    const data = await apiPost<{ report: CTIReport }>(`/cti/${id}/publish`)
+    setCtiState(s => ({
+      ...s,
+      data: s.data.map(r => (r._id === id ? data.report : r)),
+    }))
+    showToast('CTI Report published to Polygon blockchain and verified', 'success')
+  }, [showToast])
+
+  const discardCTI = useCallback(async (id: string) => {
+    await apiDelete(`/cti/${id}`)
+    setCtiState(s => ({ ...s, data: s.data.filter(r => r._id !== id) }))
+    showToast('Draft discarded', 'info')
+  }, [showToast])
+
+  // ─── Team / User mutations ────────────────────────────────────────────────────
+
+  const inviteUser = useCallback(async (userData: { name: string; email: string; temporaryPassword: string; role: UserRole }) => {
+    await apiPost('/users', userData)
+    await fetchTeam()
+    showToast(`Invitation sent to ${userData.email}`, 'success')
+  }, [fetchTeam, showToast])
+
+  const changeUserRole = useCallback(async (id: string, role: UserRole) => {
+    await apiPatch(`/users/${id}/role`, { role })
+    setTeamState(s => ({
+      ...s,
+      data: s.data.map(u => (u._id === id ? { ...u, role } : u)),
+    }))
+    showToast('Role updated', 'success')
+  }, [showToast])
+
+  const toggleUserActive = useCallback(async (id: string, currentlyActive: boolean) => {
+    if (currentlyActive) {
+      await apiPatch(`/users/${id}/deactivate`)
+    } else {
+      await apiPatch(`/users/${id}/reactivate`)
+    }
+    setTeamState(s => ({
+      ...s,
+      data: s.data.map(u => (u._id === id ? { ...u, isActive: !currentlyActive } : u)),
+    }))
+    showToast('User status updated', 'success')
+  }, [showToast])
+
+  // ─── Context value ────────────────────────────────────────────────────────────
+
+  const ctx: AppContextType = {
+    currentUser,
+    login,
+    logout,
+    page,
+    pageParams,
+    navigate,
+    toasts,
+    showToast,
+    dismissToast,
+
+    endpoints: endpointState.data,
+    endpointsLoading: endpointState.loading,
+    endpointsError: endpointState.error,
+    refetchEndpoints: fetchEndpoints,
+
+    detections: detectionState.data,
+    detectionsLoading: detectionState.loading,
+    detectionsError: detectionState.error,
+    refetchDetections: fetchDetections,
+
+    ctiReports: ctiState.data,
+    ctiLoading: ctiState.loading,
+    ctiError: ctiState.error,
+    refetchCTI: fetchCTI,
+
+    teamUsers: teamState.data,
+    teamLoading: teamState.loading,
+    teamError: teamState.error,
+    refetchTeam: fetchTeam,
+
+    auditLogs: auditState.data,
+    auditLogsLoading: auditState.loading,
+    auditLogsError: auditState.error,
+    refetchAuditLogs: fetchAuditLogs,
+
+    globalFeed: feedState.data,
+    feedLoading: feedState.loading,
+    feedError: feedState.error,
+
+    addEndpoint,
+    removeEndpoint,
+    resolveDetection,
+    generateCTI,
+    updateCTIDraft,
+    publishCTI,
+    discardCTI,
+    inviteUser,
+    changeUserRole,
+    toggleUserActive,
+  }
+
+  // ─── Rendering ────────────────────────────────────────────────────────────────
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center space-y-4">
+        <div className="w-8 h-8 border-4 border-navy-900 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm font-medium text-slate-500">Restoring session…</p>
+      </div>
+    )
+  }
+
+  const renderPage = () => {
+    if (!currentUser) {
+      if (page === 'register') return <RegisterPage />
+      return <LoginPage />
+    }
+    
+    switch (page) {
+      case 'dashboard': return <DashboardPage />
+      case 'endpoints': return <EndpointsPage />
+      case 'endpoint-detail': return <EndpointDetailPage />
+      case 'detections': return <DetectionsPage />
+      case 'detection-detail': return <DetectionDetailPage />
+      case 'cti-center': return <CTICenterPage />
+      case 'cti-draft-editor': return <CTIDraftEditorPage />
+      case 'blockchain-verification': return <BlockchainVerificationPage />
+      case 'audit-logs': return <AuditLogsPage />
+      case 'team': return <TeamPage />
+      case 'settings': return <SettingsPage />
+      default: return <DashboardPage />
+    }
+  }
+
+  return (
+    <AppContext.Provider value={ctx}>
+      {!currentUser ? (
+        renderPage()
+      ) : (
+        <Layout>{renderPage()}</Layout>
+      )}
+
+      {/* Toast stack */}
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+        {toasts.map(t => (
+          <ToastItem key={t.id} toast={t} onDismiss={() => dismissToast(t.id)} />
+        ))}
+      </div>
+    </AppContext.Provider>
+  )
+}

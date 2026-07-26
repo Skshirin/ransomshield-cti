@@ -99,7 +99,7 @@ export async function rotateRefreshToken(oldRefreshToken: string) {
     role: user.role,
   });
 
-  return { accessToken, refreshToken: newRefreshToken };
+  return { user, accessToken, refreshToken: newRefreshToken };
 }
 
 export async function logoutUser(refreshToken: string) {

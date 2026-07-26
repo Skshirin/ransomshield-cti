@@ -13,6 +13,7 @@ const REFRESH_COOKIE_OPTIONS = {
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
   path: "/api/auth",
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
 
 export async function register(req: Request, res: Response) {
@@ -66,9 +67,18 @@ export async function refresh(req: Request, res: Response) {
     throw new AppError("No refresh token provided", 401);
   }
 
-  const { accessToken, refreshToken } = await rotateRefreshToken(token);
+  const { accessToken, refreshToken, user } = await rotateRefreshToken(token);
   res.cookie(REFRESH_COOKIE_NAME, refreshToken, REFRESH_COOKIE_OPTIONS);
-  res.status(200).json({ accessToken });
+  res.status(200).json({
+    accessToken,
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      organizationId: user.organizationId,
+    },
+  });
 }
 
 export async function logout(req: Request, res: Response) {

@@ -7,9 +7,15 @@ import {
   getEndpoints,
   getEndpoint,
   deleteEndpoint,
+  activate,
 } from "../controllers/endpoint.controller";
 
 const router = Router();
+
+// Public bootstrap route - the activation token itself IS the credential
+// (same pattern as an npm publish token), so no JWT is required here. This
+// must be registered before requireAuth below.
+router.post("/activate", asyncHandler(activate));
 
 router.use(requireAuth);
 

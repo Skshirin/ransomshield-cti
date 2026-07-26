@@ -5,8 +5,11 @@ import {
   listEndpoints,
   getEndpointById,
   removeEndpoint,
+  activateEndpoint,
 } from "../services/endpoint.service";
 import { AppError } from "../middleware/error.middleware";
+import { Request } from "express";
+
 
 export async function addEndpoint(req: AuthenticatedRequest, res: Response) {
   const { name } = req.body;
@@ -52,4 +55,19 @@ export async function deleteEndpoint(req: AuthenticatedRequest, res: Response) {
   const organizationId = req.user!.organizationId;
   await removeEndpoint(organizationId, req.params.id);
   res.status(200).json({ message: "Endpoint removed successfully" });
+}
+
+export async function activate(req: Request, res: Response) {
+  const { activationToken } = req.body;
+  if (!activationToken) {
+    throw new AppError("activationToken is required", 400);
+  }
+
+  const result = await activateEndpoint(activationToken);
+
+  res.status(200).json({
+    message: "Endpoint activated successfully",
+    organizationId: result.organizationId,
+    endpointId: result.endpointId,
+  });
 }

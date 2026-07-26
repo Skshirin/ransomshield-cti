@@ -26,7 +26,22 @@ export function createApp(): Application {
   app.use(limiter);
 
   app.use(helmet());
-  app.use(cors({ origin: env.corsOrigin, credentials: true }));
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        const allowedOrigins = process.env.CORS_ORIGIN
+          ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
+          : ["http://localhost:8443", "http://localhost:5173", "http://localhost:3000"];
+
+        if (!origin || env.nodeEnv === "development" || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error("Not allowed by CORS"));
+        }
+      },
+      credentials: true,
+    })
+  );
   app.use(morgan(env.nodeEnv === "development" ? "dev" : "combined"));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));

@@ -88,3 +88,30 @@ export async function removeEndpoint(organizationId: string, endpointId: string)
 
   return endpoint;
 }
+
+export async function activateEndpoint(rawToken: string) {
+  const tokenHash = hashActivationToken(rawToken);
+
+  const endpoint = await EndpointModel.findOne({
+    activationTokenHash: tokenHash,
+    isDeleted: false,
+  }).select("+activationTokenHash");
+
+  if (!endpoint) {
+    throw new AppError("Invalid activation token", 401);
+  }
+
+  if (endpoint.activationTokenExpiresAt && endpoint.activationTokenExpiresAt < new Date()) {
+    throw new AppError("Activation token has expired", 401);
+  }
+
+  endpoint.status = "ONLINE";
+  endpoint.activatedAt = new Date();
+  endpoint.lastCheckInAt = new Date();
+  await endpoint.save();
+
+  return {
+    organizationId: endpoint.organizationId.toString(),
+    endpointId: (endpoint._id as any).toString(),
+  };
+}
