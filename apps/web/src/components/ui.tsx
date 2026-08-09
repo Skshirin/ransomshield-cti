@@ -1,3 +1,5 @@
+'use client'
+
 import { type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import { X, CheckCircle2, AlertCircle, Info, Loader2 } from 'lucide-react'
 import type { DetectionSeverity, DetectionStatus, EndpointStatus, CTIStatus, VerificationStatus, UserRole, Toast } from '@/lib/types'
@@ -115,7 +117,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export function Button({ variant = 'primary', size = 'md', loading, children, className = '', disabled, ...props }: ButtonProps) {
-  const base = 'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none'
+  const base = 'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none cursor-pointer'
 
   const variants = {
     primary: 'bg-navy-900 text-white hover:bg-navy-800 focus:ring-navy-600',

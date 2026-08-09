@@ -1,27 +1,11 @@
-/**
- * Socket.IO client singleton for RansomShield real-time events.
- *
- * - initSocket(token): creates (or recreates) a socket with JWT auth handshake.
- *   Called on login and whenever the access token is refreshed mid-session.
- * - disconnectSocket(): tears down the connection on logout.
- * - getSocket(): returns the current socket instance (or null if not connected).
- *
- * Event names emitted by the server:
- *   detection:new       – a new detection was created
- *   detection:resolved  – a detection status changed
- *   cti:published       – a CTI report was published to the blockchain
- */
-
 import { io, type Socket } from 'socket.io-client'
 
-const WS_URL = import.meta.env.VITE_WS_URL as string
+const WS_URL = (process.env.NEXT_PUBLIC_WS_URL as string) || ''
 
 let _socket: Socket | null = null
 
 export function initSocket(accessToken: string): Socket {
-  // If already connected with same token, no-op
   if (_socket?.connected) {
-    // Reconnect with fresh token (token refreshed mid-session)
     _socket.disconnect()
   }
 

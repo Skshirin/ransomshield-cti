@@ -1,13 +1,4 @@
-from activation import activate_agent
-from sysmon_reader import start_sysmon_reader
-
-
-def main():
-    print("[agent] Starting Ransomware Detection Agent (Sysmon-driven)...")
-    print("[agent] NOTE: this process must run as Administrator to read the Sysmon event log.")
-    activate_agent()
-    start_sysmon_reader()
-
+from sysmon_reader import start_monitoring
 
 if __name__ == "__main__":
-    main()
+    start_monitoring()

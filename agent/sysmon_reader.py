@@ -1,220 +1,201 @@
-"""
-Reads Sysmon events directly from the Windows Event Log
-(Microsoft-Windows-Sysmon/Operational channel) using pywin32's Vista+
-Event Log API (EvtQuery/EvtNext/EvtRender). This replaces the old
-watchdog (file) + psutil (process polling) approach with real,
-event-driven telemetry that includes true process attribution -
-something a plain filesystem watcher can never provide, since it has no
-knowledge of which process performed a file operation.
-
-Requires the agent to run with Administrator privileges (or as a member
-of the "Event Log Readers" local group) to read this channel.
-"""
-import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from typing import Optional, Dict, Any
 
 import win32evtlog
 
-from feature_extractor import (
-    extract_features_from_process_event,
-    extract_features_from_file_event,
-    extract_features_from_registry_event,
-)
-from ml_client import get_prediction, report_detection
-from process_pair_tracker import ProcessPairTracker
-from config import AUTO_REPORT_DETECTIONS
 
-CHANNEL = "Microsoft-Windows-Sysmon/Operational"
-POLL_INTERVAL_SECONDS = 2
-RISK_SCORE_ALERT_THRESHOLD = 70
+SYSLOG_NAME = "Microsoft-Windows-Sysmon/Operational"
 
-# XML namespace used by all Windows Event Log XML - required to correctly
-# find elements with ElementTree, since Sysmon events aren't in the default
-# (no-namespace) XML namespace.
-NS = {"e": "http://schemas.microsoft.com/win/2004/08/events/event"}
-
-tracker = ProcessPairTracker()
-
-# ProcessId -> {"image": str, "parent_image": str, "freq_ratio": float}
-# Populated on every ProcessCreate (Event 1) event, so that later File
-# Create (11) and Registry (13) events - which only carry a ProcessId, not
-# the full parent chain - can be correctly attributed back to the process
-# that caused them.
-process_context = {}
+NS = {
+    "e": "http://schemas.microsoft.com/win/2004/08/events/event"
+}
 
 
-def _now_iso():
-    return datetime.now(timezone.utc).isoformat()
+class SysmonReader:
+    """
+    Reads Sysmon events and converts them into a normalized Python dictionary.
 
+    Output format:
 
-def _parse_event_xml(xml_str):
-    """Extracts EventID and all <Data Name="..."> key/value pairs from a
-    raw Sysmon event XML string into a plain dict."""
-    root = ET.fromstring(xml_str)
-    system = root.find("e:System", NS)
-    event_id = int(system.find("e:EventID", NS).text)
-
-    data = {}
-    event_data = root.find("e:EventData", NS)
-    if event_data is not None:
-        for item in event_data.findall("e:Data", NS):
-            name = item.get("Name")
-            data[name] = item.text or ""
-
-    return event_id, data
-
-
-def _handle_process_create(data):
-    image = data.get("Image", "")
-    parent_image = data.get("ParentImage", "")
-    process_id = data.get("ProcessId", "")
-    command_line = data.get("CommandLine", "")
-
-    image_name = image.split("\\")[-1] if image else ""
-    parent_name = parent_image.split("\\")[-1] if parent_image else ""
-
-    freq_ratio = tracker.get_ratio(parent_name, image_name)
-
-    # Remember this process's context so later file/registry events from
-    # the same ProcessId can be attributed correctly.
-    process_context[process_id] = {
-        "image": image_name,
-        "exe_path": image,
-        "parent_image": parent_name,
-        "freq_ratio": freq_ratio,
+    {
+        "record_id": 12345,
+        "timestamp": datetime(...),
+        "event_id": 11,
+        "pid": 4820,
+        "process_name": "python.exe",
+        "image": "C:\\Python\\python.exe",
+        "data": {...}
     }
+    """
 
-    features = extract_features_from_process_event(
-        process_name=image_name,
-        parent_process_name=parent_name,
-        exe_path=image,
-        freq_ratio=freq_ratio,
-    )
+    def __init__(self, log_name: str = SYSLOG_NAME):
+        self.log_name = log_name
 
-    _score_and_report(
-        features,
-        f"PROCESS_CREATE {image_name} (parent: {parent_name}, cmdline: {command_line[:80]})",
-        "SUSPICIOUS_PROCESS",
-        f"Process {image_name} (parent: {parent_name}) launched with command line: {command_line[:200]}",
-    )
-
-
-def _handle_file_create(data):
-    target_filename = data.get("TargetFilename", "")
-    process_id = data.get("ProcessId", "")
-    image = data.get("Image", "")
-
-    context = process_context.get(process_id, {})
-    process_name = context.get("image") or (image.split("\\")[-1] if image else "")
-    parent_name = context.get("parent_image", "")
-    freq_ratio = context.get("freq_ratio", 0.5)  # neutral default if process wasn't seen at startup
-
-    features = extract_features_from_file_event(
-        file_path=target_filename,
-        event_type="created",
-        process_name=process_name,
-        parent_process_name=parent_name,
-        freq_ratio=freq_ratio,
-    )
-
-    _score_and_report(
-        features,
-        f"FILE_CREATE {target_filename} (by: {process_name})",
-        "SUSPICIOUS_FILE_ACTIVITY",
-        f"File created: {target_filename} (by process: {process_name})",
-    )
-
-
-def _handle_registry_event(data):
-    target_object = data.get("TargetObject", "")
-    image = data.get("Image", "")
-    process_id = data.get("ProcessId", "")
-
-    context = process_context.get(process_id, {})
-    process_name = context.get("image") or (image.split("\\")[-1] if image else "")
-    parent_name = context.get("parent_image", "")
-    freq_ratio = context.get("freq_ratio", 0.5)
-
-    features = extract_features_from_registry_event(
-        target_object=target_object,
-        process_name=process_name,
-        parent_process_name=parent_name,
-        freq_ratio=freq_ratio,
-    )
-
-    _score_and_report(
-        features,
-        f"REGISTRY_SET {target_object} (by: {process_name})",
-        "SUSPICIOUS_REGISTRY_CHANGE",
-        f"Registry value set: {target_object} (by process: {process_name})",
-    )
-
-
-def _score_and_report(features, log_label, indicator_type, description):
-    try:
-        result = get_prediction(features)
-    except Exception as exc:
-        print(f"[sysmon_reader] Failed to get prediction: {exc}")
-        return
-
-    risk_score = result["risk_score"]
-    print(f"[sysmon_reader] {log_label} -> risk_score={risk_score}")
-
-    if risk_score >= RISK_SCORE_ALERT_THRESHOLD:
-        if not AUTO_REPORT_DETECTIONS:
-            print("[sysmon_reader] High risk score (auto-report disabled, see config.py)")
-            return
-        print("[sysmon_reader] ALERT: high risk score, reporting detection to backend")
+    def _parse_event(self, event) -> Optional[Dict[str, Any]]:
         try:
-            report_detection(
-                risk_score,
-                indicators=[{"type": indicator_type, "description": description, "observedAt": _now_iso()}],
+            xml = win32evtlog.EvtRender(
+                event,
+                win32evtlog.EvtRenderEventXml
             )
-        except Exception as exc:
-            print(f"[sysmon_reader] Failed to report detection: {exc}")
 
+            root = ET.fromstring(xml)
 
-def start_sysmon_reader():
-    print(f"[sysmon_reader] Starting Sysmon event reader on channel: {CHANNEL}")
+            # -----------------------------
+            # System information
+            # -----------------------------
 
-    last_time_iso = datetime.now(timezone.utc).isoformat()
+            record_id_node = root.find(
+                ".//e:EventRecordID",
+                NS
+            )
 
-    while True:
-        time.sleep(POLL_INTERVAL_SECONDS)
+            event_id_node = root.find(
+                ".//e:EventID",
+                NS
+            )
 
-        query = "*"
-        try:
-            flags = win32evtlog.EvtQueryChannelPath | win32evtlog.EvtQueryForwardDirection
-            handle = win32evtlog.EvtQuery(CHANNEL, flags, query)
-        except Exception as exc:
-            print(f"[sysmon_reader] Failed to query event log: {exc}")
-            print("[sysmon_reader] Is Sysmon installed and is this process running as Administrator?")
-            time.sleep(5)
-            continue
+            time_node = root.find(
+                ".//e:TimeCreated",
+                NS
+            )
 
-        while True:
-            try:
-                events = win32evtlog.EvtNext(handle, 50)
-            except Exception:
-                break  # no more events available right now
+            if record_id_node is None or event_id_node is None:
+                return None
 
-            if not events:
-                break
+            record_id = int(record_id_node.text)
+            event_id = int(event_id_node.text)
 
-            for event in events:
-                xml_str = win32evtlog.EvtRender(event, win32evtlog.EvtRenderEventXml)
-                try:
-                    event_id, data = _parse_event_xml(xml_str)
-                except Exception as exc:
-                    print(f"[sysmon_reader] Failed to parse event XML: {exc}")
+            timestamp = datetime.now(timezone.utc)
+
+            if time_node is not None:
+                system_time = time_node.attrib.get("SystemTime")
+
+                if system_time:
+                    timestamp = datetime.fromisoformat(
+                        system_time.replace("Z", "+00:00")
+                    )
+
+            # -----------------------------
+            # EventData
+            # -----------------------------
+
+            data = {}
+
+            for node in root.findall(
+                ".//e:EventData/e:Data",
+                NS
+            ):
+                name = node.attrib.get("Name")
+
+                if not name:
                     continue
 
-                if event_id == 1:
-                    _handle_process_create(data)
-                elif event_id == 11:
-                    _handle_file_create(data)
-                elif event_id == 13:
-                    _handle_registry_event(data)
+                data[name] = node.text
 
-                last_time_iso = datetime.now(timezone.utc).isoformat()
+            # -----------------------------
+            # Extract PID
+            # -----------------------------
+
+            pid = self._extract_pid(data)
+
+            # -----------------------------
+            # Extract process information
+            # -----------------------------
+
+            process_name = self._extract_process_name(data)
+
+            image = data.get("Image")
+
+            return {
+                "record_id": record_id,
+                "timestamp": timestamp,
+                "event_id": event_id,
+                "pid": pid,
+                "process_name": process_name,
+                "image": image,
+                "data": data,
+            }
+
+        except Exception as e:
+            print(f"[SysmonReader] Failed to parse event: {e}")
+            return None
+
+    @staticmethod
+    def _extract_pid(data: Dict[str, Any]) -> Optional[int]:
+        """
+        Sysmon commonly exposes ProcessId as a decimal or hexadecimal value.
+        """
+
+        value = data.get("ProcessId")
+
+        if value is None:
+            return None
+
+        try:
+            # Decimal
+            return int(value)
+
+        except ValueError:
+            try:
+                # Hexadecimal
+                return int(value, 16)
+
+            except ValueError:
+                return None
+
+    @staticmethod
+    def _extract_process_name(
+        data: Dict[str, Any]
+    ) -> Optional[str]:
+
+        image = data.get("Image")
+
+        if image:
+            return image.split("\\")[-1]
+
+        process_name = data.get("ProcessName")
+
+        if process_name:
+            return process_name
+
+        return None
+
+    def read_latest(self, max_events: int = 100):
+        """
+        Read the latest Sysmon events.
+
+        Returns:
+            list[dict]
+        """
+
+        handle = win32evtlog.EvtQuery(
+            self.log_name,
+            win32evtlog.EvtQueryReverseDirection,
+            "*"
+        )
+
+        try:
+            events = win32evtlog.EvtNext(
+                handle,
+                min(int(max_events), 64)
+            )
+        except pywintypes.error as e:
+            if e.winerror == 1734:
+                print("[SysmonReader] EvtNext buffer error; retrying with 1 event")
+                try:
+                    events = win32evtlog.EvtNext(handle, 1)
+                except pywintypes.error:
+                    events = []
+            else:
+                raise
+
+        results = []
+
+        for event in events:
+            parsed = self._parse_event(event)
+
+            if parsed is not None:
+                results.append(parsed)
+
+        return results

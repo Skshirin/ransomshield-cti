@@ -1,4 +1,7 @@
+'use client'
+
 import { type ReactNode } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import {
   Shield,
   LayoutDashboard,
@@ -16,16 +19,16 @@ import {
 import { useApp } from '@/lib/context'
 
 const navItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'endpoints', label: 'Endpoints', icon: Monitor },
-  { id: 'detections', label: 'Detections', icon: AlertTriangle, badge: true },
-  { id: 'cti-center', label: 'CTI Center', icon: Globe },
-  { id: 'blockchain-verification', label: 'Blockchain Verify', icon: Zap },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+  { id: 'endpoints', label: 'Endpoints', icon: Monitor, path: '/endpoints' },
+  { id: 'detections', label: 'Detections', icon: AlertTriangle, badge: true, path: '/detections' },
+  { id: 'cti-center', label: 'CTI Center', icon: Globe, path: '/cti-center' },
+  { id: 'blockchain-verification', label: 'Blockchain Verify', icon: Zap, path: '/blockchain-verification' },
 ]
 
 const adminNavItems = [
-  { id: 'audit-logs', label: 'Audit Logs', icon: ClipboardList },
-  { id: 'team', label: 'Team', icon: Users },
+  { id: 'audit-logs', label: 'Audit Logs', icon: ClipboardList, path: '/audit-logs' },
+  { id: 'team', label: 'Team', icon: Users, path: '/team' },
 ]
 
 const pageLabels: Record<string, string> = {
@@ -40,10 +43,21 @@ const pageLabels: Record<string, string> = {
   'audit-logs': 'Audit Logs',
   team: 'Team',
   settings: 'Settings',
+  '/dashboard': 'Dashboard',
+  '/endpoints': 'Endpoints',
+  '/detections': 'Detections',
+  '/cti-center': 'CTI Center',
+  '/cti-draft-editor': 'CTI Draft Editor',
+  '/blockchain-verification': 'Blockchain Verification',
+  '/audit-logs': 'Audit Logs',
+  '/team': 'Team',
+  '/settings': 'Settings',
 }
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { currentUser, navigate, page, detections, logout } = useApp()
+  const router = useRouter()
+  const pathname = usePathname()
   const newDetectionCount = detections.filter(d => d.status === 'NEW').length
   const isAdmin = currentUser?.role === 'ORG_ADMIN' || currentUser?.role === 'SUPER_ADMIN'
 
@@ -54,16 +68,15 @@ export default function Layout({ children }: { children: ReactNode }) {
     .toUpperCase()
     .slice(0, 2) ?? '??'
 
-  const activePage = page.startsWith('endpoint-detail')
-    ? 'endpoints'
-    : page.startsWith('detection-detail')
-      ? 'detections'
-      : page.startsWith('cti-draft')
-        ? 'cti-center'
-        : page
+  const activePath = pathname || page
+
+  const handleNav = (item: { id: string; path: string }) => {
+    navigate(item.id)
+    router.push(item.path)
+  }
 
   return (
-    <div className="flex h-full bg-content">
+    <div className="flex h-full min-h-screen bg-content">
       {/* Sidebar */}
       <aside className="w-60 flex-shrink-0 bg-navy-900 flex flex-col h-screen sticky top-0">
         {/* Logo */}
@@ -96,12 +109,12 @@ export default function Layout({ children }: { children: ReactNode }) {
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
           {navItems.map(item => {
             const Icon = item.icon
-            const isActive = activePage === item.id
+            const isActive = activePath.startsWith(item.path) || page === item.id
             return (
               <button
                 key={item.id}
-                onClick={() => navigate(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                onClick={() => handleNav(item)}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer ${
                   isActive
                     ? 'bg-white/10 text-white'
                     : 'text-white/55 hover:bg-white/5 hover:text-white/80'
@@ -125,12 +138,12 @@ export default function Layout({ children }: { children: ReactNode }) {
               </div>
               {adminNavItems.map(item => {
                 const Icon = item.icon
-                const isActive = activePage === item.id
+                const isActive = activePath.startsWith(item.path) || page === item.id
                 return (
                   <button
                     key={item.id}
-                    onClick={() => navigate(item.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                    onClick={() => handleNav(item)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer ${
                       isActive
                         ? 'bg-white/10 text-white'
                         : 'text-white/55 hover:bg-white/5 hover:text-white/80'
@@ -148,9 +161,9 @@ export default function Layout({ children }: { children: ReactNode }) {
         {/* Bottom: Settings + Logout */}
         <div className="px-2 py-3 border-t border-white/5 space-y-0.5">
           <button
-            onClick={() => navigate('settings')}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
-              activePage === 'settings'
+            onClick={() => handleNav({ id: 'settings', path: '/settings' })}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer ${
+              activePath.startsWith('/settings') || page === 'settings'
                 ? 'bg-white/10 text-white'
                 : 'text-white/55 hover:bg-white/5 hover:text-white/80'
             }`}
@@ -159,8 +172,11 @@ export default function Layout({ children }: { children: ReactNode }) {
             Settings
           </button>
           <button
-            onClick={logout}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-white/55 hover:bg-white/5 hover:text-white/80 transition-all duration-150"
+            onClick={() => {
+              logout()
+              router.push('/login')
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-white/55 hover:bg-white/5 hover:text-white/80 transition-all duration-150 cursor-pointer"
           >
             <LogOut size={16} />
             Log Out
@@ -172,7 +188,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
         <header className="h-14 flex items-center justify-between px-6 bg-white/80 backdrop-blur border-b border-slate-100 flex-shrink-0">
-          <h1 className="text-lg font-bold text-navy-900">{pageLabels[page] ?? page}</h1>
+          <h1 className="text-lg font-bold text-navy-900">{pageLabels[activePath] ?? pageLabels[page] ?? 'Dashboard'}</h1>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-1.5 text-sm text-slate-400 w-52">
               <Search size={14} />
@@ -186,8 +202,8 @@ export default function Layout({ children }: { children: ReactNode }) {
               )}
             </button>
             <button
-              onClick={() => navigate('settings')}
-              className="w-8 h-8 rounded-lg bg-navy-900 flex items-center justify-center hover:bg-navy-800 transition-colors"
+              onClick={() => handleNav({ id: 'settings', path: '/settings' })}
+              className="w-8 h-8 rounded-lg bg-navy-900 flex items-center justify-center hover:bg-navy-800 transition-colors cursor-pointer"
             >
               <span className="text-[11px] font-bold text-white font-mono">{initials}</span>
             </button>
