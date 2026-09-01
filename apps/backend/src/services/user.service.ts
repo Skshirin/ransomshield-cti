@@ -30,6 +30,50 @@ export async function inviteUser(input: InviteUserInput) {
   return user;
 }
 
+export async function createInvitationCode(organizationId: string, createdByUserId: string) {
+  const { InvitationModel } = await import("../models/invitation.model");
+  const crypto = await import("crypto");
+
+  let code = "";
+  let isUnique = false;
+  let attempts = 0;
+
+  while (!isUnique && attempts < 10) {
+    attempts++;
+    // Generate clean 6-character uppercase alphanumeric code
+    const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; // exclude easily confused chars (0, O, 1, I)
+    const randomBytes = crypto.randomBytes(6);
+    code = "";
+    for (let i = 0; i < 6; i++) {
+      code += chars[randomBytes[i] % chars.length];
+    }
+    const existing = await InvitationModel.findOne({ code });
+    if (!existing) {
+      isUnique = true;
+    }
+  }
+
+  if (!isUnique) {
+    throw new AppError("Failed to generate a unique invitation code. Please try again.", 500);
+  }
+
+  const invitation = await InvitationModel.create({
+    code,
+    organizationId,
+    createdBy: createdByUserId,
+  });
+
+  return invitation;
+}
+
+export async function listOrganizationInvitations(organizationId: string) {
+  const { InvitationModel } = await import("../models/invitation.model");
+  return InvitationModel.find({ organizationId })
+    .populate("createdBy", "name email")
+    .populate("consumedBy", "name email")
+    .sort({ createdAt: -1 });
+}
+
 export async function listOrganizationUsers(organizationId: string) {
   return UserModel.find({ organizationId }).select("-passwordHash");
 }

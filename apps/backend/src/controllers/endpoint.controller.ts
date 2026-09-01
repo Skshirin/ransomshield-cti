@@ -6,6 +6,7 @@ import {
   getEndpointById,
   removeEndpoint,
   activateEndpoint,
+  heartbeatEndpoint,
 } from "../services/endpoint.service";
 import { AppError } from "../middleware/error.middleware";
 import { Request } from "express";
@@ -69,5 +70,21 @@ export async function activate(req: Request, res: Response) {
     message: "Endpoint activated successfully",
     organizationId: result.organizationId,
     endpointId: result.endpointId,
+  });
+}
+
+export async function heartbeat(req: Request, res: Response) {
+  const { cpuUsagePercent, ramUsagePercent, diskUsagePercent } = req.body;
+  
+  const endpoint = await heartbeatEndpoint(req.params.id, {
+    cpuUsagePercent,
+    ramUsagePercent,
+    diskUsagePercent,
+  });
+
+  res.status(200).json({
+    message: "Heartbeat check-in successful",
+    status: endpoint.status,
+    lastCheckInAt: endpoint.lastCheckInAt,
   });
 }

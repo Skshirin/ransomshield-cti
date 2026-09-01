@@ -6,6 +6,7 @@ import {
   activationTokenExpiry,
 } from "../utils/activationToken";
 import { AppError } from "../middleware/error.middleware";
+import { emitToOrganization } from "../websocket/socket";
 
 interface CreateEndpointInput {
   organizationId: string;
@@ -32,6 +33,8 @@ export async function createEndpoint(input: CreateEndpointInput) {
     activationTokenExpiresAt: activationTokenExpiry(),
   });
 
+  emitToOrganization(input.organizationId, "endpoint:new", endpoint);
+
   // Raw token is only ever available here, at creation time — the caller
   // (controller) must return it to the client immediately, since it cannot
   // be retrieved again afterward.
@@ -45,6 +48,18 @@ interface ListEndpointsInput {
 }
 
 export async function listEndpoints(input: ListEndpointsInput) {
+  // Check for stale online endpoints (no heartbeat in > 60s) and transition to OFFLINE
+  const staleThreshold = new Date(Date.now() - 60 * 1000);
+  await EndpointModel.updateMany(
+    {
+      organizationId: input.organizationId,
+      status: "ONLINE",
+      isDeleted: false,
+      lastCheckInAt: { $lt: staleThreshold },
+    },
+    { status: "OFFLINE" }
+  );
+
   const query: Record<string, any> = {
     organizationId: input.organizationId,
     isDeleted: false,
@@ -86,6 +101,8 @@ export async function removeEndpoint(organizationId: string, endpointId: string)
   endpoint.isDeleted = true;
   await endpoint.save();
 
+  emitToOrganization(organizationId, "endpoint:removed", { endpointId: (endpoint._id as any).toString() });
+
   return endpoint;
 }
 
@@ -110,8 +127,50 @@ export async function activateEndpoint(rawToken: string) {
   endpoint.lastCheckInAt = new Date();
   await endpoint.save();
 
+  emitToOrganization(endpoint.organizationId.toString(), "endpoint:updated", endpoint);
+
   return {
     organizationId: endpoint.organizationId.toString(),
     endpointId: (endpoint._id as any).toString(),
   };
+}
+
+export async function heartbeatEndpoint(
+  endpointId: string,
+  stats: { cpuUsagePercent?: number; ramUsagePercent?: number; diskUsagePercent?: number }
+) {
+  if (!Types.ObjectId.isValid(endpointId)) {
+    throw new AppError("Invalid endpoint ID", 400);
+  }
+
+  const endpoint = await EndpointModel.findOne({
+    _id: endpointId,
+    isDeleted: false,
+  });
+
+  if (!endpoint) {
+    throw new AppError("Endpoint not found", 404);
+  }
+
+  endpoint.lastCheckInAt = new Date();
+
+  if (endpoint.status === "PENDING" || endpoint.status === "OFFLINE") {
+    endpoint.status = "ONLINE";
+  }
+
+  if (stats.cpuUsagePercent !== undefined) {
+    endpoint.cpuUsagePercent = stats.cpuUsagePercent;
+  }
+  if (stats.ramUsagePercent !== undefined) {
+    endpoint.ramUsagePercent = stats.ramUsagePercent;
+  }
+  if (stats.diskUsagePercent !== undefined) {
+    endpoint.diskUsagePercent = stats.diskUsagePercent;
+  }
+
+  await endpoint.save();
+
+  emitToOrganization(endpoint.organizationId.toString(), "endpoint:heartbeat", endpoint);
+
+  return endpoint;
 }

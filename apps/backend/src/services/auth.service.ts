@@ -37,6 +37,58 @@ export async function registerOrganization(input: RegisterInput) {
   return { organization, user };
 }
 
+interface JoinInput {
+  name: string;
+  email: string;
+  password: string;
+  invitationCode: string;
+}
+
+export async function joinOrganizationWithInviteCode(input: JoinInput) {
+  const { InvitationModel } = await import("../models/invitation.model");
+
+  if (!input.invitationCode || input.invitationCode.trim().length !== 6) {
+    throw new AppError("Invitation code must be exactly 6 characters", 400);
+  }
+
+  const codeUpper = input.invitationCode.trim().toUpperCase();
+
+  // Atomically find an unconsumed invitation code
+  const invitation = await InvitationModel.findOne({
+    code: codeUpper,
+    isConsumed: false,
+  });
+
+  if (!invitation) {
+    throw new AppError("Invalid or consumed invitation code", 400);
+  }
+
+  const existingUser = await UserModel.findOne({ email: input.email.toLowerCase() });
+  if (existingUser) {
+    throw new AppError("Email already registered", 409);
+  }
+
+  const passwordHash = await hashPassword(input.password);
+
+  // Create SECURITY_ANALYST user associated with invitation's organization
+  const user = await UserModel.create({
+    organizationId: invitation.organizationId,
+    name: input.name,
+    email: input.email.toLowerCase(),
+    passwordHash,
+    role: "SECURITY_ANALYST",
+    isActive: true,
+  });
+
+  // Mark invitation as consumed atomically
+  invitation.isConsumed = true;
+  invitation.consumedBy = user._id;
+  invitation.consumedAt = new Date();
+  await invitation.save();
+
+  return { user };
+}
+
 export async function loginUser(email: string, password: string) {
   const user = await UserModel.findOne({ email: email.toLowerCase() }).select(
     "+passwordHash"

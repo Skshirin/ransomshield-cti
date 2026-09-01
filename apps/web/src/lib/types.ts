@@ -79,6 +79,17 @@ export interface CurrentUser {
   organizationId: string
 }
 
+export interface Invitation {
+  _id: string
+  code: string
+  organizationId: string
+  createdBy: { _id?: string; name: string; email: string } | string
+  isConsumed: boolean
+  consumedBy?: { _id?: string; name: string; email: string } | string
+  consumedAt?: string
+  createdAt: string
+}
+
 export interface Toast {
   id: string
   message: string

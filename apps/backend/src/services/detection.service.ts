@@ -40,6 +40,7 @@ export async function createDetection(input: CreateDetectionInput) {
   endpoint.status = "AT_RISK";
   await endpoint.save();
 
+  emitToOrganization(input.organizationId, "endpoint:updated", endpoint);
   emitToOrganization(input.organizationId, "detection:new", detection);
 
   return detection;
@@ -108,7 +109,10 @@ export async function resolveDetection(
   });
 
   if (!stillAtRisk) {
-    await EndpointModel.findByIdAndUpdate(detection.endpointId, { status: "ONLINE" });
+    const updatedEp = await EndpointModel.findByIdAndUpdate(detection.endpointId, { status: "ONLINE" }, { new: true });
+    if (updatedEp) {
+      emitToOrganization(organizationId, "endpoint:updated", updatedEp);
+    }
   }
 
   emitToOrganization(organizationId, "detection:resolved", detection);
