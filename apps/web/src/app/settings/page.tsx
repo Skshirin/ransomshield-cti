@@ -1,28 +1,64 @@
 'use client'
 
 import { useState } from 'react'
-import { User, Building2, Lock, Shield, ToggleLeft, ToggleRight } from 'lucide-react'
+import { User, Building2, Lock, Shield, ToggleLeft, ToggleRight, Ticket, Plus, Copy, Check } from 'lucide-react'
 import { useApp } from '@/lib/context'
-import { Button, Input, Card, RoleBadge } from '@/components/ui'
+import { Button, Input, Card, RoleBadge, P, BORDER, MUTED, TEXT, GREEN } from '@/components/ui'
 
 export default function SettingsPage() {
-  const { currentUser } = useApp()
+  const { currentUser, invitations, generateInvitation, showToast } = useApp()
   const [currentPw, setCurrentPw] = useState('')
   const [newPw, setNewPw] = useState('')
   const [confirmPw, setConfirmPw] = useState('')
   const [pwError, setPwError] = useState('')
+  const [pwSuccess, setPwSuccess] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [genLoading, setGenLoading] = useState(false)
+  const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [ctiSharing, setCtiSharing] = useState(true)
 
   const handlePasswordChange = async () => {
-    if (!currentPw || !newPw || !confirmPw) { setPwError('All password fields are required.'); return }
-    if (newPw !== confirmPw) { setPwError('New passwords do not match.'); return }
-    if (newPw.length < 8) { setPwError('New password must be at least 8 characters.'); return }
+    if (!currentPw || !newPw || !confirmPw) { setPwError('All password fields are required.'); setPwSuccess(''); return }
+    if (newPw !== confirmPw) { setPwError('New passwords do not match.'); setPwSuccess(''); return }
+    if (newPw.length < 8) { setPwError('New password must be at least 8 characters.'); setPwSuccess(''); return }
     setPwError('')
-    setPwError('Password change is not available via the UI. Please contact your organization admin.')
+    setPwSuccess('')
+    setLoading(true)
+
+    try {
+      const { apiPost } = await import('@/lib/api')
+      await apiPost('/auth/change-password', { currentPassword: currentPw, newPassword: newPw })
+      setPwSuccess('Password changed successfully!')
+      setCurrentPw('')
+      setNewPw('')
+      setConfirmPw('')
+    } catch (err: any) {
+      setPwError(err.message || 'Failed to change password')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGenerateCode = async () => {
+    setGenLoading(true)
+    try {
+      await generateInvitation()
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to generate invitation code', 'error')
+    } finally {
+      setGenLoading(false)
+    }
+  }
+
+  const handleCopy = (code: string) => {
+    navigator.clipboard.writeText(code)
+    setCopiedCode(code)
+    showToast(`Code ${code} copied to clipboard`, 'success')
+    setTimeout(() => setCopiedCode(null), 2000)
   }
 
   return (
-    <div className="p-6 space-y-5 max-w-2xl">
+    <div className="p-6 space-y-5 max-w-3xl">
       {/* Profile */}
       <Card className="p-5">
         <div className="flex items-center gap-3 mb-5">
@@ -61,15 +97,94 @@ export default function SettingsPage() {
               />
             </div>
           </div>
-          <p className="text-xs text-slate-400">Contact your organization admin to update your profile information.</p>
         </div>
       </Card>
 
-      {/* Organization */}
+      {/* Organization & Invitations (ORG_ADMIN Only) */}
+      {currentUser?.role === 'ORG_ADMIN' && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <Ticket size={16} className="text-slate-400" />
+              <div>
+                <h2 className="text-sm font-semibold text-navy-900">Organization Invitations</h2>
+                <p className="text-xs text-slate-500">Generate 6-character invitation codes to invite Security Analysts.</p>
+              </div>
+            </div>
+            <Button onClick={handleGenerateCode} disabled={genLoading}>
+              <Plus size={14} className="mr-1 inline" /> Generate Code
+            </Button>
+          </div>
+
+          {invitations.length === 0 ? (
+            <div className="text-center py-6 border border-dashed rounded-xl" style={{ borderColor: BORDER }}>
+              <p className="text-xs text-slate-400">No invitation codes generated yet. Click above to create one.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b" style={{ borderColor: BORDER }}>
+                    <th className="py-2 px-3 font-semibold text-slate-500">Code</th>
+                    <th className="py-2 px-3 font-semibold text-slate-500">Status</th>
+                    <th className="py-2 px-3 font-semibold text-slate-500">Created</th>
+                    <th className="py-2 px-3 font-semibold text-slate-500">Consumed By</th>
+                    <th className="py-2 px-3 font-semibold text-slate-500 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y" style={{ borderColor: BORDER }}>
+                  {invitations.map(inv => {
+                    const consumedUser = typeof inv.consumedBy === 'object' ? inv.consumedBy?.email : null
+                    return (
+                      <tr key={inv._id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-2.5 px-3 font-mono font-bold text-navy-900 text-sm">{inv.code}</td>
+                        <td className="py-2.5 px-3">
+                          {inv.isConsumed ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
+                              Consumed
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">
+                              Active / Unused
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500 font-mono">
+                          {new Date(inv.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500">
+                          {consumedUser ? (
+                            <span>{consumedUser} ({new Date(inv.consumedAt!).toLocaleDateString()})</span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          {!inv.isConsumed && (
+                            <button
+                              onClick={() => handleCopy(inv.code)}
+                              className="text-xs text-slate-500 hover:text-navy-900 inline-flex items-center gap-1 cursor-pointer font-medium"
+                            >
+                              {copiedCode === inv.code ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                              {copiedCode === inv.code ? 'Copied' : 'Copy'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Organization Info */}
       <Card className="p-5">
         <div className="flex items-center gap-3 mb-5">
           <Building2 size={16} className="text-slate-400" />
-          <h2 className="text-sm font-semibold text-navy-900">Organization</h2>
+          <h2 className="text-sm font-semibold text-navy-900">Organization Details</h2>
         </div>
         <div className="space-y-4">
           <div>
@@ -135,8 +250,9 @@ export default function SettingsPage() {
             onChange={e => setConfirmPw(e.target.value)}
           />
           {pwError && <p className="text-sm text-red-600">{pwError}</p>}
-          <Button onClick={handlePasswordChange}>
-            Update Password
+          {pwSuccess && <p className="text-sm text-emerald-600">{pwSuccess}</p>}
+          <Button onClick={handlePasswordChange} disabled={loading}>
+            {loading ? 'Updating...' : 'Update Password'}
           </Button>
         </div>
       </Card>

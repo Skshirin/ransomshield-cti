@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { CurrentUser, Endpoint, Detection, CTIReport, TeamUser, AuditLog, Toast, UserRole } from './types'
+import type { CurrentUser, Endpoint, Detection, CTIReport, TeamUser, AuditLog, Invitation, Toast, UserRole } from './types'
 
 export interface AppContextType {
   // Auth
@@ -38,6 +38,11 @@ export interface AppContextType {
   teamError: string | null
   refetchTeam: () => void
 
+  invitations: Invitation[]
+  invitationsLoading: boolean
+  invitationsError: string | null
+  refetchInvitations: () => void
+
   auditLogs: AuditLog[]
   auditLogsLoading: boolean
   auditLogsError: string | null
@@ -56,6 +61,7 @@ export interface AppContextType {
   publishCTI: (id: string) => Promise<void>
   discardCTI: (id: string) => Promise<void>
   inviteUser: (data: { name: string; email: string; temporaryPassword: string; role: UserRole }) => Promise<void>
+  generateInvitation: () => Promise<Invitation>
   changeUserRole: (id: string, role: UserRole) => Promise<void>
   toggleUserActive: (id: string, currentlyActive: boolean) => Promise<void>
 }

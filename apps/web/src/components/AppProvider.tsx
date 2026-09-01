@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { AppContext } from '@/lib/context'
 import type { AppContextType } from '@/lib/context'
-import type { CurrentUser, Endpoint, Detection, CTIReport, TeamUser, AuditLog, Toast, UserRole } from '@/lib/types'
+import type { CurrentUser, Endpoint, Detection, CTIReport, TeamUser, AuditLog, Invitation, Toast, UserRole } from '@/lib/types'
 import {
   apiGet,
   apiPost,
@@ -37,27 +37,24 @@ function initList<T>(defaultData: T[] = []): ListState<T> {
   return { data: defaultData, loading: false, error: null }
 }
 
-const MOCK_USER: CurrentUser = {
-  id: 'mock-admin-id',
-  name: 'Security Admin',
-  email: 'admin@sentineliq.local',
-  role: 'ORG_ADMIN',
-  organizationId: 'org-default',
-}
+const PUBLIC_PATHS = ['/', '/login', '/register', '/join-organization', '/forgot-password']
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(MOCK_USER)
-  const [isInitializing, setIsInitializing] = useState(false)
+  const pathname = usePathname()
+
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
+  const [isInitializing, setIsInitializing] = useState(true)
   const [page, setPage] = useState('dashboard')
   const [pageParams, setPageParams] = useState<Record<string, string>>({})
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  // Data states with mock fallbacks for quick rendering and robust offline operation
+  // Data states
   const [endpointState, setEndpointState] = useState<ListState<Endpoint>>(initList(mockEndpoints))
   const [detectionState, setDetectionState] = useState<ListState<Detection>>(initList(mockDetections))
   const [ctiState, setCtiState] = useState<ListState<CTIReport>>(initList(mockCTIReports))
   const [teamState, setTeamState] = useState<ListState<TeamUser>>(initList(mockTeamUsers))
+  const [invitationState, setInvitationState] = useState<ListState<Invitation>>(initList([]))
   const [auditState, setAuditState] = useState<ListState<AuditLog>>(initList(mockAuditLogs))
   const [feedState, setFeedState] = useState<ListState<CTIReport>>(initList(mockGlobalCTIFeed))
 
@@ -69,7 +66,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const navigate = useCallback((newPage: string, params: Record<string, string> = {}) => {
     setPage(newPage)
     setPageParams(params)
-    if (newPage !== 'login' && newPage !== 'register') {
+    if (newPage !== 'login' && newPage !== 'register' && newPage !== 'join-organization') {
       localStorage.setItem('ransomshield_saved_page', newPage)
     }
   }, [])
@@ -135,6 +132,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const fetchInvitations = useCallback(async () => {
+    setInvitationState(s => ({ ...s, loading: true, error: null }))
+    try {
+      const data = await apiGet<{ invitations: Invitation[] }>('/users/invitations')
+      setInvitationState({ data: data.invitations, loading: false, error: null })
+    } catch {
+      setInvitationState(s => ({ ...s, loading: false }))
+    }
+  }, [])
+
   const fetchAuditLogs = useCallback(async () => {
     setAuditState(s => ({ ...s, loading: true, error: null }))
     try {
@@ -148,7 +155,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ─── Auth Handlers ────────────────────────────────────────────────────────────
 
   const handleAuthFailure = useCallback(() => {
-    setCurrentUser(MOCK_USER)
+    setCurrentUser(null)
     setAccessToken(null)
     disconnectSocket()
   }, [])
@@ -200,57 +207,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })
   }, [showToast])
 
+  // Session Restoration Effect
   useEffect(() => {
     restoreSession().then(async user => {
-      const activeUser = user || MOCK_USER
-      setCurrentUser(activeUser)
-      const token = getAccessToken()
-      if (token) {
-        const socket = initSocket(token)
-        socket.on('connect', () => setupSocketListeners())
-        setupSocketListeners()
+      if (user) {
+        setCurrentUser(user)
+        const token = getAccessToken()
+        if (token) {
+          const socket = initSocket(token)
+          socket.on('connect', () => setupSocketListeners())
+          setupSocketListeners()
+        }
+
+        await Promise.all([
+          fetchEndpoints(),
+          fetchDetections(),
+          fetchCTI(),
+          fetchTeam(),
+          ...(user.role === 'ORG_ADMIN' ? [fetchAuditLogs(), fetchInvitations()] : []),
+        ]).catch(() => {})
+      } else {
+        setCurrentUser(null)
       }
-
-      await Promise.all([
-        fetchEndpoints(),
-        fetchDetections(),
-        fetchCTI(),
-        fetchTeam(),
-        ...(activeUser.role === 'ORG_ADMIN' ? [fetchAuditLogs()] : []),
-      ]).catch(() => {})
-
       setIsInitializing(false)
     }).catch(() => {
-      setCurrentUser(MOCK_USER)
+      setCurrentUser(null)
       setIsInitializing(false)
     })
-  }, [fetchEndpoints, fetchDetections, fetchCTI, fetchTeam, fetchAuditLogs, setupSocketListeners])
+  }, [fetchEndpoints, fetchDetections, fetchCTI, fetchTeam, fetchAuditLogs, fetchInvitations, setupSocketListeners])
+
+  // Route Protection Effect
+  useEffect(() => {
+    if (isInitializing) return
+    const isPublic = PUBLIC_PATHS.includes(pathname)
+    if (!currentUser && !isPublic) {
+      router.push('/login')
+    }
+  }, [currentUser, isInitializing, pathname, router])
 
   const login = useCallback(async (email: string, password: string) => {
-    let loggedInUser = MOCK_USER
-    try {
-      const data = await apiPost<{ accessToken: string; user: CurrentUser }>('/auth/login', { email, password })
-      setAccessToken(data.accessToken)
-      loggedInUser = data.user
-      const socket = initSocket(data.accessToken)
-      socket.on('connect', () => setupSocketListeners())
-      setupSocketListeners()
-    } catch {
-      // Fall back to mock user
-    }
-    setCurrentUser(loggedInUser)
-    navigate('dashboard')
+    const data = await apiPost<{ accessToken: string; user: CurrentUser }>('/auth/login', { email, password })
+    setAccessToken(data.accessToken)
+    setCurrentUser(data.user)
+    const socket = initSocket(data.accessToken)
+    socket.on('connect', () => setupSocketListeners())
+    setupSocketListeners()
+
+    router.push('/dashboard')
 
     await Promise.all([
       fetchEndpoints(),
       fetchDetections(),
       fetchCTI(),
       fetchTeam(),
-      ...(loggedInUser.role === 'ORG_ADMIN' ? [fetchAuditLogs()] : []),
+      ...(data.user.role === 'ORG_ADMIN' ? [fetchAuditLogs(), fetchInvitations()] : []),
     ]).catch(() => {})
 
-    showToast(`Welcome back, ${loggedInUser.name.split(' ')[0]}!`, 'success')
-  }, [navigate, fetchEndpoints, fetchDetections, fetchCTI, fetchTeam, fetchAuditLogs, showToast, setupSocketListeners])
+    showToast(`Welcome back, ${data.user.name.split(' ')[0]}!`, 'success')
+  }, [router, fetchEndpoints, fetchDetections, fetchCTI, fetchTeam, fetchAuditLogs, fetchInvitations, showToast, setupSocketListeners])
 
   const logout = useCallback(async () => {
     try {
@@ -260,11 +274,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     setAccessToken(null)
     disconnectSocket()
-    setCurrentUser(MOCK_USER)
-    navigate('dashboard')
-  }, [navigate])
+    setCurrentUser(null)
+    router.push('/login')
+    showToast('Logged out successfully', 'info')
+  }, [router, showToast])
 
   // ─── Mutations ────────────────────────────────────────────────────────────────
+
+  const generateInvitation = useCallback(async (): Promise<Invitation> => {
+    const data = await apiPost<{ invitation: Invitation }>('/users/invitations')
+    setInvitationState(s => ({ ...s, data: [data.invitation, ...s.data] }))
+    showToast(`Invitation code ${data.invitation.code} generated`, 'success')
+    return data.invitation
+  }, [showToast])
 
   const addEndpoint = useCallback(async (name: string) => {
     let newEp: Endpoint = {
@@ -490,6 +512,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     teamError: teamState.error,
     refetchTeam: fetchTeam,
 
+    invitations: invitationState.data,
+    invitationsLoading: invitationState.loading,
+    invitationsError: invitationState.error,
+    refetchInvitations: fetchInvitations,
+
     auditLogs: auditState.data,
     auditLogsLoading: auditState.loading,
     auditLogsError: auditState.error,
@@ -507,17 +534,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     publishCTI,
     discardCTI,
     inviteUser,
+    generateInvitation,
     changeUserRole,
     toggleUserActive,
   }
 
-  if (isInitializing) {
+  const isPublicRoute = PUBLIC_PATHS.includes(pathname)
+
+  if (isInitializing && !isPublicRoute) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center space-y-4">
-        <div className="w-8 h-8 border-4 border-navy-900 border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm font-medium text-slate-500">Restoring session…</p>
+        <div className="w-8 h-8 border-4 border-[#17313E] border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm font-medium text-slate-500">Verifying session...</p>
       </div>
     )
+  }
+
+  if (!currentUser && !isPublicRoute) {
+    return null
   }
 
   return (

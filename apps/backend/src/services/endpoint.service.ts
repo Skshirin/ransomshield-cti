@@ -115,3 +115,40 @@ export async function activateEndpoint(rawToken: string) {
     endpointId: (endpoint._id as any).toString(),
   };
 }
+
+export async function heartbeatEndpoint(
+  endpointId: string,
+  stats: { cpuUsagePercent?: number; ramUsagePercent?: number; diskUsagePercent?: number }
+) {
+  if (!Types.ObjectId.isValid(endpointId)) {
+    throw new AppError("Invalid endpoint ID", 400);
+  }
+
+  const endpoint = await EndpointModel.findOne({
+    _id: endpointId,
+    isDeleted: false,
+  });
+
+  if (!endpoint) {
+    throw new AppError("Endpoint not found", 404);
+  }
+
+  endpoint.lastCheckInAt = new Date();
+
+  if (endpoint.status === "PENDING" || endpoint.status === "OFFLINE") {
+    endpoint.status = "ONLINE";
+  }
+
+  if (stats.cpuUsagePercent !== undefined) {
+    endpoint.cpuUsagePercent = stats.cpuUsagePercent;
+  }
+  if (stats.ramUsagePercent !== undefined) {
+    endpoint.ramUsagePercent = stats.ramUsagePercent;
+  }
+  if (stats.diskUsagePercent !== undefined) {
+    endpoint.diskUsagePercent = stats.diskUsagePercent;
+  }
+
+  await endpoint.save();
+  return endpoint;
+}

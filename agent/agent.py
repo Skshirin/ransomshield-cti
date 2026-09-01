@@ -22,10 +22,11 @@ from typing import Dict, Optional
 
 import numpy as np
 
-# Your three files — must be in the same directory
+import config as cfg
+
+# Your files — must be in the same directory
 from feature_extractor import FeatureExtractor
 from sliding_window_buffer import SlidingWindowBuffer
-from sysmon_reader import SysmonReader
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -211,7 +212,16 @@ class CSVLogger:
 
 class Agent:
     def __init__(self, csv_path: Optional[str] = None, no_model: bool = False):
-        self.reader   = SysmonReader()
+        # Select provider based on configuration mode
+        if cfg.TELEMETRY_MODE == "simulated":
+            from telemetry_provider import SimulatedTelemetryProvider
+            self.reader = SimulatedTelemetryProvider(scenario=cfg.SIMULATION_SCENARIO)
+            cprint(f"[Agent] Telemetry Mode: SIMULATED (Scenario: {cfg.SIMULATION_SCENARIO.upper()})", GREEN)
+        else:
+            from telemetry_provider import WindowsTelemetryProvider
+            self.reader = WindowsTelemetryProvider()
+            cprint("[Agent] Telemetry Mode: REAL (Windows Event Logs)", GREEN)
+
         self.buffer   = SlidingWindowBuffer(window_size_seconds=WINDOW_SIZE_SECONDS)
         self.extractor = FeatureExtractor()
 
@@ -447,6 +457,11 @@ class Agent:
                             f"{'!'*60}",
                             RED, bold=True
                         )
+                        self._report_ransomware_alert(result["pid"], result["process_name"], result["ema_score"])
+
+                # Send heartbeat every 3 steps (approx. 9-10 seconds)
+                if step % 3 == 0:
+                    self._send_heartbeat()
 
                     if self.csv_logger:
                         self.csv_logger.write(
@@ -479,6 +494,55 @@ class Agent:
             if self.csv_logger:
                 self.csv_logger.close()
                 cprint(f"[Agent] CSV saved: {self.csv_logger.path}", GREEN)
+
+    def _send_heartbeat(self):
+        """Sends CPU, RAM, and Disk usage stats to the backend to keep status ONLINE."""
+        if not cfg.ENDPOINT_ID:
+            return
+
+        try:
+            import psutil
+            import requests
+
+            payload = {
+                "cpuUsagePercent": round(psutil.cpu_percent(), 1),
+                "ramUsagePercent": round(psutil.virtual_memory().percent, 1),
+                "diskUsagePercent": round(psutil.disk_usage('/').percent, 1)
+            }
+            headers = {"x-api-key": cfg.BACKEND_API_KEY}
+
+            url = f"{cfg.BACKEND_API_URL}/api/endpoints/{cfg.ENDPOINT_ID}/heartbeat"
+            response = requests.post(url, json=payload, headers=headers, timeout=5)
+            response.raise_for_status()
+            cprint(f"  [Heartbeat] Stats sent. Status: {response.json().get('status')}", GREEN)
+        except Exception as e:
+            cprint(f"  [Heartbeat] Failed to send: {e}", YELLOW)
+
+    def _report_ransomware_alert(self, pid: int, process_name: str, score: float):
+        """Sends a critical ransomware detection alert to the backend."""
+        if not cfg.ENDPOINT_ID or not cfg.AUTO_REPORT_DETECTIONS:
+            return
+
+        try:
+            import requests
+            payload = {
+                "organizationId": cfg.ORGANIZATION_ID,
+                "endpointId": cfg.ENDPOINT_ID,
+                "riskScore": int(round(score * 100)),
+                "indicators": [
+                    f"Ransomware activity detected in process {process_name} (PID {pid})",
+                    f"EMA detection score: {score:.3f}",
+                    "Simulated ransomware telemetry indicators detected" if cfg.TELEMETRY_MODE == "simulated" else "Real Sysmon events triggered local XGBoost thresholds"
+                ],
+                "modelVersion": "agent-v0.1"
+            }
+            headers = {"x-api-key": cfg.BACKEND_API_KEY}
+            url = f"{cfg.BACKEND_API_URL}/api/detections/ingest"
+            response = requests.post(url, json=payload, headers=headers, timeout=5)
+            response.raise_for_status()
+            cprint("  [Detection] Alert reported to backend successfully.", GREEN)
+        except Exception as e:
+            cprint(f"  [Detection] Failed to report alert to backend: {e}", RED)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

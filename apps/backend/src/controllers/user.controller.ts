@@ -2,6 +2,8 @@ import { Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
 import {
   inviteUser,
+  createInvitationCode,
+  listOrganizationInvitations,
   listOrganizationUsers,
   getUserById,
   updateUserRole,
@@ -11,6 +13,29 @@ import {
 import { AppError } from "../middleware/error.middleware";
 
 const VALID_ROLES = ["ORG_ADMIN", "SECURITY_ANALYST"];
+
+export async function createInvitation(req: AuthenticatedRequest, res: Response) {
+  const invitation = await createInvitationCode(
+    req.user!.organizationId,
+    req.user!.userId
+  );
+  res.status(201).json({
+    message: "Invitation code generated successfully",
+    invitation: {
+      id: invitation._id,
+      code: invitation.code,
+      organizationId: invitation.organizationId,
+      createdBy: invitation.createdBy,
+      isConsumed: invitation.isConsumed,
+      createdAt: invitation.createdAt,
+    },
+  });
+}
+
+export async function getInvitations(req: AuthenticatedRequest, res: Response) {
+  const invitations = await listOrganizationInvitations(req.user!.organizationId);
+  res.status(200).json({ invitations });
+}
 
 export async function invite(req: AuthenticatedRequest, res: Response) {
   const { name, email, temporaryPassword, role } = req.body;

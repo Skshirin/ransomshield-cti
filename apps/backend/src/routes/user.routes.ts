@@ -4,6 +4,8 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { auditLog } from "../middleware/auditLog.middleware";
 import {
   invite,
+  createInvitation,
+  getInvitations,
   getUsers,
   getUser,
   changeRole,
@@ -16,6 +18,8 @@ const router = Router();
 router.use(requireAuth);
 
 router.get("/", asyncHandler(getUsers));
+router.get("/invitations", requireRole("ORG_ADMIN"), asyncHandler(getInvitations));
+router.post("/invitations", requireRole("ORG_ADMIN"), auditLog("INVITATION_GENERATED"), asyncHandler(createInvitation));
 router.get("/:id", asyncHandler(getUser));
 
 // Only Org Admins manage team membership.

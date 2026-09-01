@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import {
   registerOrganization,
+  joinOrganizationWithInviteCode,
   loginUser,
   rotateRefreshToken,
   logoutUser,
@@ -37,6 +38,35 @@ export async function register(req: Request, res: Response) {
     message: "Organization registered successfully",
     organizationId: organization._id,
     userId: user._id,
+  });
+}
+
+export async function join(req: Request, res: Response) {
+  const { name, email, password, invitationCode } = req.body;
+
+  if (!name || !email || !password || !invitationCode) {
+    throw new AppError("name, email, password, and invitationCode are required", 400);
+  }
+  if (password.length < 8) {
+    throw new AppError("Password must be at least 8 characters", 400);
+  }
+
+  const { user } = await joinOrganizationWithInviteCode({
+    name,
+    email,
+    password,
+    invitationCode,
+  });
+
+  res.status(201).json({
+    message: "Joined organization successfully",
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      organizationId: user.organizationId,
+    },
   });
 }
 

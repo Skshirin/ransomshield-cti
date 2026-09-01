@@ -1,4 +1,4 @@
-from sysmon_reader import start_monitoring
+from agent import main
 
 if __name__ == "__main__":
-    start_monitoring()
+    main()

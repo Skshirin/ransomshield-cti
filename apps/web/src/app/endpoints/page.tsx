@@ -1,279 +1,257 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Plus, Key, Copy, Check, Trash2, RefreshCw, AlertCircle, Monitor } from 'lucide-react'
-import { useApp } from '@/lib/context'
-import { Button, Input, Modal, ConfirmModal, EndpointStatusBadge, ResourceBar, EmptyState, Card } from '@/components/ui'
-import type { Endpoint } from '@/lib/types'
+import Layout from '@/components/Layout'
+import { Plus, Search, Monitor, MoreVertical, X, Copy } from 'lucide-react'
+import {
+  P, STORM, BG, TEXT, MUTED, BORDER, RED,
+  ENDPOINTS, DETECTIONS, StatusBadge, ScoreBadge, FieldInput, PrimaryBtn,
+} from '@/components/ui'
 
-function fmt(iso?: string) {
-  if (!iso) return 'Never'
-  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
+function EndpointsContent() {
+  type EP = typeof ENDPOINTS[0];
+  const [selected, setSelected] = useState<EP | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [generated, setGenerated] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("All");
 
-function SkeletonRow() {
-  return (
-    <tr className="border-b border-slate-50 animate-pulse">
-      <td className="px-5 py-3.5">
-        <div className="h-3.5 w-32 bg-slate-100 rounded mb-1" />
-        <div className="h-2.5 w-12 bg-slate-100 rounded" />
-      </td>
-      <td className="px-4 py-3.5"><div className="h-5 w-16 bg-slate-100 rounded-full" /></td>
-      <td className="px-4 py-3.5 hidden md:table-cell"><div className="h-3 w-40 bg-slate-100 rounded" /></td>
-      <td className="px-4 py-3.5 hidden lg:table-cell"><div className="h-3 w-24 bg-slate-100 rounded" /></td>
-      <td className="px-4 py-3.5 hidden xl:table-cell"><div className="h-3 w-40 bg-slate-100 rounded" /></td>
-      <td className="px-4 py-3.5 w-10" />
-    </tr>
-  )
-}
-
-function AddEndpointModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { addEndpoint } = useApp()
-  const [name, setName] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<{ endpoint: Endpoint; activationToken: string; installInstructions: string } | null>(null)
-  const [copied, setCopied] = useState(false)
-  const [error, setError] = useState('')
-
-  const handleAdd = async () => {
-    if (!name.trim()) return
-    setLoading(true)
-    setError('')
-    try {
-      const res = await addEndpoint(name.trim())
-      setResult(res)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to add endpoint')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const copyToken = () => {
-    if (result) {
-      navigator.clipboard.writeText(result.activationToken)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
-  const handleClose = () => {
-    setName('')
-    setResult(null)
-    setCopied(false)
-    setError('')
-    onClose()
-  }
-
-  return (
-    <Modal open={open} onClose={handleClose} title={result ? 'Endpoint Added — Save Your Token' : 'Add New Endpoint'} width="max-w-xl">
-      {!result ? (
-        <div className="space-y-4">
-          <Input
-            label="Endpoint name"
-            placeholder="e.g. PROD-WEB-003"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleAdd()}
-          />
-          <p className="text-xs text-slate-500">Give the endpoint a unique, identifiable name. The name cannot be changed after creation.</p>
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>
-          )}
-          <div className="flex gap-3 justify-end pt-2">
-            <Button variant="secondary" onClick={handleClose}>Cancel</Button>
-            <Button onClick={handleAdd} loading={loading} disabled={!name.trim()}>Add Endpoint</Button>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Key size={16} className="text-amber-600" />
-              <p className="text-sm font-semibold text-amber-800">Save this token — shown once only</p>
-            </div>
-            <p className="text-xs text-amber-700">This activation token is required to register the agent. It cannot be retrieved after closing this dialog.</p>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1.5">Activation Token</label>
-            <div className="flex gap-2">
-              <div className="flex-1 bg-slate-900 text-emerald-400 font-mono text-sm px-3 py-2.5 rounded-lg overflow-x-auto select-all">
-                {result.activationToken}
-              </div>
-              <button
-                onClick={copyToken}
-                className="px-3 py-2.5 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                title="Copy token"
-              >
-                {copied ? <Check size={15} className="text-emerald-600" /> : <Copy size={15} className="text-slate-500" />}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1.5">Install Instructions</label>
-            <pre className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-xs text-slate-700 font-mono whitespace-pre-wrap">
-              {result.installInstructions}
-            </pre>
-          </div>
-
-          <div className="flex justify-end pt-1">
-            <Button onClick={handleClose}>Done</Button>
-          </div>
-        </div>
-      )}
-    </Modal>
-  )
-}
-
-export default function EndpointsPage() {
-  const { endpoints, navigate, currentUser, removeEndpoint, endpointsLoading, endpointsError, refetchEndpoints } = useApp()
-  const router = useRouter()
-  const isAdmin = currentUser?.role === 'ORG_ADMIN' || currentUser?.role === 'SUPER_ADMIN'
-  const [showAdd, setShowAdd] = useState(false)
-  const [removeTarget, setRemoveTarget] = useState<string | null>(null)
-  const [removing, setRemoving] = useState(false)
-
-  const handleRemove = async () => {
-    if (!removeTarget) return
-    setRemoving(true)
-    try {
-      await removeEndpoint(removeTarget)
-    } finally {
-      setRemoving(false)
-      setRemoveTarget(null)
-    }
-  }
-
-  const handleRowClick = (epId: string) => {
-    navigate('endpoint-detail', { id: epId })
-    router.push(`/endpoints/${epId}`)
-  }
+  const filtered = ENDPOINTS.filter(e =>
+    (filter === "All" || e.status === filter) &&
+    e.name.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-5">
-        <p className="text-sm text-slate-500">{endpointsLoading ? 'Loading…' : `${endpoints.length} endpoint${endpoints.length !== 1 ? 's' : ''} monitored`}</p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={refetchEndpoints}
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-            title="Refresh"
-          >
-            <RefreshCw size={14} />
-          </button>
-          {isAdmin && (
-            <Button onClick={() => setShowAdd(true)}>
-              <Plus size={15} /> Add Endpoint
-            </Button>
-          )}
+      {/* Header */}
+      <div className="flex items-start justify-between mb-5">
+        <div>
+          <h1 className="text-[24px] font-bold" style={{ color: TEXT }}>Endpoints</h1>
+          <p className="text-[14px]" style={{ color: MUTED }}>52 total, 48 online</p>
         </div>
+        <button
+          onClick={() => { setAddOpen(true); setGenerated(false); }}
+          className="flex items-center gap-2 h-10 px-4 rounded-[10px] text-[13px] font-semibold text-white cursor-pointer"
+          style={{ backgroundColor: P }}
+        >
+          <Plus className="w-4 h-4" /> Add Endpoint
+        </button>
       </div>
 
-      {endpointsError && (
-        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-xl mb-4">
-          <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
-          <span className="text-sm text-red-700 flex-1">{endpointsError}</span>
-          <Button size="sm" variant="secondary" onClick={refetchEndpoints}>Retry</Button>
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-2 px-3 h-9 rounded-lg border bg-white"
+          style={{ borderColor: BORDER, width: 280 }}>
+          <Search className="w-3.5 h-3.5 flex-shrink-0" style={{ color: MUTED }} />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search endpoints..."
+            className="flex-1 text-[13px] outline-none bg-transparent"
+            style={{ color: TEXT }}
+          />
+        </div>
+        {["All", "Online", "At Risk", "Offline"].map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className="px-3 h-9 rounded-lg text-[13px] font-medium border transition-colors cursor-pointer"
+            style={{
+              borderColor: filter === f ? P : BORDER,
+              backgroundColor: filter === f ? "rgba(23,49,62,0.07)" : "white",
+              color: filter === f ? P : MUTED,
+            }}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="bg-white border rounded-[10px] shadow-sm overflow-hidden" style={{ borderColor: BORDER }}>
+        <table className="w-full">
+          <thead>
+            <tr className="border-b bg-white" style={{ borderColor: BORDER }}>
+              {["Endpoint Name", "Status", "Last Check-in", "OS Version", ""].map((h, i) => (
+                <th key={i} className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((ep) => (
+              <tr
+                key={ep.id}
+                onClick={() => setSelected(ep)}
+                className="border-b cursor-pointer hover:bg-[#F8FAFC] transition-all"
+                style={{ borderColor: BORDER }}
+              >
+                <td className="px-5 py-3.5">
+                  <div className="flex items-center gap-2">
+                    <Monitor className="w-3.5 h-3.5 flex-shrink-0" style={{ color: MUTED }} />
+                    <span className="text-[13px] font-semibold" style={{ color: TEXT }}>{ep.name}</span>
+                  </div>
+                </td>
+                <td className="px-5 py-3.5"><StatusBadge status={ep.status} /></td>
+                <td className="px-5 py-3.5 text-[13px]" style={{ color: MUTED }}>{ep.lastSeen}</td>
+                <td className="px-5 py-3.5 text-[13px]" style={{ color: MUTED }}>{ep.os}</td>
+                <td className="px-5 py-3.5 text-right">
+                  <button
+                    className="p-1.5 rounded hover:bg-gray-100 transition-colors cursor-pointer"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <MoreVertical className="w-4 h-4" style={{ color: MUTED }} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Endpoint Drawer */}
+      {selected && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20" onClick={() => setSelected(null)} />
+          <div className="relative w-[480px] bg-white h-full shadow-2xl flex flex-col overflow-y-auto z-10">
+            <div className="flex items-start justify-between px-6 py-5 border-b" style={{ borderColor: BORDER }}>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className="text-[16px] font-bold" style={{ color: TEXT }}>{selected.name}</h2>
+                  <StatusBadge status={selected.status} />
+                </div>
+                <p className="text-[12px]" style={{ color: MUTED }}>Last seen {selected.lastSeen} · {selected.os}</p>
+              </div>
+              <button onClick={() => setSelected(null)} className="p-1.5 rounded hover:bg-gray-100 mt-0.5 cursor-pointer">
+                <X className="w-4 h-4" style={{ color: MUTED }} />
+              </button>
+            </div>
+
+            <div className="p-6 flex flex-col gap-6">
+              {/* Specs */}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide mb-3" style={{ color: MUTED }}>System Specs</p>
+                {[
+                  { label: "CPU Usage", val: selected.cpu },
+                  { label: "RAM Usage", val: selected.ram },
+                  { label: "Disk Usage", val: selected.disk },
+                ].map(s => (
+                  <div key={s.label} className="flex items-center gap-3 mb-2.5">
+                    <span className="text-[12px] w-20" style={{ color: MUTED }}>{s.label}</span>
+                    <div className="flex-1 h-1.5 rounded-full" style={{ backgroundColor: BORDER }}>
+                      <div
+                        className="h-1.5 rounded-full transition-all"
+                        style={{ width: `${s.val}%`, backgroundColor: s.val > 80 ? RED : STORM }}
+                      />
+                    </div>
+                    <span className="text-[12px] font-semibold w-7 text-right" style={{ color: TEXT }}>{s.val}%</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* File activity */}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide mb-3" style={{ color: MUTED }}>Recent File Activity</p>
+                {[
+                  { path: "C:\\Users\\Admin\\Documents\\report_q4.docx", warn: false },
+                  { path: "C:\\Windows\\System32\\cmd.exe", warn: false },
+                  { path: "C:\\Users\\Admin\\AppData\\Local\\Temp\\~tmp482.dat", warn: true },
+                ].map(({ path, warn }, i) => (
+                  <div key={i} className="flex items-start gap-2 py-2 border-b" style={{ borderColor: BORDER }}>
+                    <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: warn ? RED : BORDER }} />
+                    <span className="text-[11px] break-all" style={{ color: MUTED, fontFamily: "var(--font-mono, monospace)" }}>{path}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Detection history */}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide mb-3" style={{ color: MUTED }}>Detection History</p>
+                {DETECTIONS.filter(d => d.endpoint === selected.name).length === 0
+                  ? <p className="text-[12px]" style={{ color: MUTED }}>No detections for this endpoint.</p>
+                  : DETECTIONS.filter(d => d.endpoint === selected.name).map(d => (
+                    <div key={d.id} className="flex items-center justify-between py-2.5 border-b" style={{ borderColor: BORDER }}>
+                      <span className="text-[11px]" style={{ color: MUTED, fontFamily: "var(--font-mono, monospace)" }}>{d.time}</span>
+                      <div className="flex items-center gap-2">
+                        <ScoreBadge score={d.score} />
+                        <StatusBadge status={d.status} />
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+
+            <div className="mt-auto px-6 py-4 border-t flex gap-3" style={{ borderColor: BORDER }}>
+              <button className="flex-1 h-10 rounded-lg text-[13px] font-medium border transition-colors hover:bg-gray-50 cursor-pointer"
+                style={{ borderColor: BORDER, color: TEXT }}>Rename</button>
+              <button className="flex-1 h-10 rounded-lg text-[13px] font-medium border transition-colors hover:bg-red-50 cursor-pointer"
+                style={{ borderColor: RED, color: RED }}>Deactivate</button>
+            </div>
+          </div>
         </div>
       )}
 
-      <Card>
-        {endpointsLoading ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100">
-                  <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Endpoint</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider hidden md:table-cell">OS Version</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider hidden lg:table-cell">Last Check-In</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider hidden xl:table-cell w-48">Resources</th>
-                  <th className="px-4 py-3 w-10" />
-                </tr>
-              </thead>
-              <tbody>{[...Array(5)].map((_, i) => <SkeletonRow key={i} />)}</tbody>
-            </table>
-          </div>
-        ) : endpoints.length === 0 ? (
-          <EmptyState
-            icon={<Monitor size={40} />}
-            title="No endpoints yet"
-            message="Add your first endpoint to start monitoring for ransomware activity."
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100">
-                  <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Endpoint</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider hidden md:table-cell">OS Version</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider hidden lg:table-cell">Last Check-In</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider hidden xl:table-cell w-48">Resources</th>
-                  <th className="px-4 py-3 w-10" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {endpoints.map(ep => (
-                  <tr
-                    key={ep._id}
-                    className="hover:bg-slate-50/70 cursor-pointer transition-colors"
-                    onClick={() => handleRowClick(ep._id)}
-                  >
-                    <td className="px-5 py-3.5">
-                      <p className="font-medium text-navy-900 font-mono text-xs">{ep.name}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">v{ep.agentVersion || 'Pending'}</p>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <EndpointStatusBadge status={ep.status} />
-                    </td>
-                    <td className="px-4 py-3.5 hidden md:table-cell">
-                      <span className="text-xs text-slate-600">{ep.osVersion?.split(' (')[0] || '-'}</span>
-                    </td>
-                    <td className="px-4 py-3.5 hidden lg:table-cell">
-                      <span className="text-xs text-slate-500 font-mono">{fmt(ep.lastCheckInAt)}</span>
-                    </td>
-                    <td className="px-4 py-3.5 hidden xl:table-cell">
-                      <div className="space-y-1.5 w-40">
-                        <ResourceBar value={ep.cpuUsagePercent || 0} label="CPU" />
-                        <ResourceBar value={ep.ramUsagePercent || 0} label="RAM" />
-                        <ResourceBar value={ep.diskUsagePercent || 0} label="Disk" />
+      {/* Add Endpoint Modal */}
+      {addOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/20" onClick={() => setAddOpen(false)} />
+          <div className="relative w-[480px] bg-white rounded-2xl shadow-2xl p-7 z-10">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-[18px] font-bold" style={{ color: TEXT }}>Add New Endpoint</h2>
+              <button onClick={() => setAddOpen(false)} className="hover:opacity-70 cursor-pointer">
+                <X className="w-4 h-4" style={{ color: MUTED }} />
+              </button>
+            </div>
+            <FieldInput label="Endpoint Name" placeholder="e.g. WORKSTATION-A05" value="" onChange={() => {}} />
+            {!generated
+              ? (
+                <div className="mt-4">
+                  <PrimaryBtn onClick={() => setGenerated(true)}>Generate Installer</PrimaryBtn>
+                </div>
+              )
+              : (
+                <div className="mt-4 flex flex-col gap-4">
+                  <div>
+                    <p className="text-[12px] font-semibold mb-2" style={{ color: MUTED }}>Installation Token</p>
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border"
+                      style={{ borderColor: BORDER, backgroundColor: BG }}>
+                      <span className="flex-1 text-[12px] truncate" style={{ color: TEXT, fontFamily: "var(--font-mono, monospace)" }}>
+                        SENTIQ-4F2A-7B9C-E1D3-8A6F
+                      </span>
+                      <button><Copy className="w-3.5 h-3.5 cursor-pointer" style={{ color: MUTED }} /></button>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[12px] font-semibold mb-2.5" style={{ color: MUTED }}>Installation Steps</p>
+                    {[
+                      "Download the installer package below",
+                      "Run installer with administrator privileges",
+                      "Enter the token when prompted, then restart",
+                    ].map((s, i) => (
+                      <div key={i} className="flex gap-3 mb-2.5">
+                        <span
+                          className="w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center flex-shrink-0 text-white"
+                          style={{ backgroundColor: P }}
+                        >{i + 1}</span>
+                        <span className="text-[13px]" style={{ color: TEXT }}>{s}</span>
                       </div>
-                    </td>
-                    <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
-                      {isAdmin && (
-                        <button
-                          onClick={() => setRemoveTarget(ep._id)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                          title="Remove endpoint"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    ))}
+                  </div>
+                  <PrimaryBtn>Download Installer</PrimaryBtn>
+                </div>
+              )
+            }
           </div>
-        )}
-      </Card>
-
-      <AddEndpointModal open={showAdd} onClose={() => setShowAdd(false)} />
-
-      <ConfirmModal
-        open={!!removeTarget}
-        onClose={() => setRemoveTarget(null)}
-        onConfirm={handleRemove}
-        title="Remove Endpoint"
-        message="This endpoint will be removed from monitoring. The agent will stop reporting and all historical data will be retained. This action cannot be undone."
-        confirmLabel="Remove Endpoint"
-        danger
-        loading={removing}
-      />
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function EndpointsPage() {
+  return (
+    <Layout>
+      <EndpointsContent />
+    </Layout>
   )
 }

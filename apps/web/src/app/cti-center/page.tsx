@@ -1,283 +1,280 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { ExternalLink, Copy, Check, Globe, Loader2, Trash2, Edit2, AlertCircle, RefreshCw } from 'lucide-react'
-import { useApp } from '@/lib/context'
-import { CTIStatusBadge, VerificationBadge, Button, ConfirmModal, EmptyState, Card } from '@/components/ui'
+import Layout from '@/components/Layout'
+import { Check, ChevronRight, Lock, Loader2, ExternalLink, CheckCircle2 } from 'lucide-react'
+import {
+  P, STORM, BG, TEXT, MUTED, BORDER, RED, GREEN,
+} from '@/components/ui'
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
+function CTICenterContent() {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [visibility, setVisibility] = useState<"org" | "network">("network");
+  const [publishing, setPublishing] = useState(false);
 
-function TxHash({ hash, blockNumber }: { hash: string; blockNumber: number | null }) {
-  const [copied, setCopied] = useState(false)
-  const copy = () => {
-    navigator.clipboard.writeText(hash)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  const stepLabels = ["Review Draft", "Publish", "Verify"];
+
+  const doPublish = () => {
+    setPublishing(true);
+    setTimeout(() => { setPublishing(false); setStep(3); }, 2200);
+  };
+
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[10px] font-mono text-slate-500">{hash.slice(0, 18)}…</span>
-      <button onClick={copy} className="p-0.5 text-slate-400 hover:text-slate-600 cursor-pointer">
-        {copied ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
-      </button>
-      <a
-        href={`https://amoy.polygonscan.com/tx/${hash}`}
-        target="_blank"
-        rel="noreferrer"
-        className="text-blue-500 hover:text-blue-700"
-        title="View on Polygon Amoy testnet explorer"
-      >
-        <ExternalLink size={11} />
-      </a>
-      {blockNumber && <span className="text-[10px] font-mono text-slate-400">#{blockNumber.toLocaleString()}</span>}
-    </div>
-  )
-}
+    <div className="p-6">
+      <h1 className="text-[24px] font-bold mb-6" style={{ color: TEXT }}>CTI Center</h1>
 
-function SkeletonCard() {
-  return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 animate-pulse">
-      <div className="flex justify-between gap-4">
-        <div className="flex-1 space-y-2">
-          <div className="flex gap-2">
-            <div className="h-5 w-14 bg-slate-100 rounded-full" />
-            <div className="h-4 w-20 bg-slate-100 rounded" />
-          </div>
-          <div className="h-3 w-full bg-slate-100 rounded" />
-          <div className="h-3 w-5/6 bg-slate-100 rounded" />
-          <div className="h-3 w-3/4 bg-slate-100 rounded" />
-        </div>
-        <div className="flex-shrink-0 space-y-2">
-          <div className="h-7 w-28 bg-slate-100 rounded-lg" />
-          <div className="h-7 w-24 bg-slate-100 rounded-lg" />
-        </div>
+      {/* Step indicator */}
+      <div className="flex items-start justify-center gap-0 mb-8">
+        {stepLabels.map((label, i) => {
+          const n = i + 1 as 1 | 2 | 3;
+          const done = n < step;
+          const active = n === step;
+          return (
+            <div key={n} className="flex items-start">
+              <div className="flex flex-col items-center gap-2 w-28">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-bold border-2 transition-all"
+                  style={{
+                    backgroundColor: done ? GREEN : active ? P : "white",
+                    borderColor: done ? GREEN : active ? P : BORDER,
+                    color: done || active ? "white" : MUTED,
+                  }}
+                >
+                  {done ? <Check className="w-4 h-4" /> : n}
+                </div>
+                <span className="text-[12px] font-medium text-center" style={{ color: active ? TEXT : MUTED }}>{label}</span>
+              </div>
+              {i < 2 && (
+                <div className="w-24 h-px mt-4" style={{ backgroundColor: done ? GREEN : BORDER }} />
+              )}
+            </div>
+          );
+        })}
       </div>
+
+      {/* Stage 1 */}
+      {step === 1 && (
+        <>
+          <div className="grid grid-cols-5 gap-6">
+            <div className="col-span-3 flex flex-col gap-4">
+              <div className="border rounded-[10px] overflow-hidden" style={{ borderColor: BORDER }}>
+                <div className="px-4 py-3 border-b" style={{ borderColor: BORDER, backgroundColor: BG }}>
+                  <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Attack Summary</p>
+                </div>
+                <p className="p-4 text-[13px] leading-relaxed" style={{ color: TEXT }}>
+                  LockBit 3.0 ransomware variant detected targeting network shares via lateral movement.
+                  Initial access achieved through a phishing email with a macro-enabled document. The attacker
+                  executed vssadmin.exe to delete shadow copies before initiating mass file encryption
+                  with the .locked extension. Estimated 1,204 files affected across 3 network shares.
+                </p>
+              </div>
+
+              <div className="border rounded-[10px] overflow-hidden" style={{ borderColor: BORDER }}>
+                <div className="px-4 py-3 border-b" style={{ borderColor: BORDER, backgroundColor: BG }}>
+                  <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Indicators of Compromise</p>
+                </div>
+                <div className="p-4 flex flex-wrap gap-2">
+                  {["3f2a1b4c5d6e7f8a9b0c", "192.168.1.47", "vssadmin.exe", "C:\\Temp\\~tmp482.dat", "*.locked", "SHA256:a1b2c3d4"].map(ioc => (
+                    <span key={ioc} className="px-2.5 py-1 rounded border text-[11px]"
+                      style={{ borderColor: BORDER, backgroundColor: BG, color: TEXT, fontFamily: "var(--font-mono, monospace)" }}>
+                      {ioc}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border rounded-[10px] overflow-hidden" style={{ borderColor: BORDER }}>
+                <div className="px-4 py-3 border-b" style={{ borderColor: BORDER, backgroundColor: BG }}>
+                  <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Recommended Actions</p>
+                </div>
+                <ul className="p-4 flex flex-col gap-2.5">
+                  {[
+                    "Isolate affected endpoint immediately from network",
+                    "Restore from last clean backup (pre-14:21 UTC)",
+                    "Reset credentials for all accounts accessed from affected host",
+                    "Patch email gateway — block macro-enabled attachments",
+                  ].map((a, i) => (
+                    <li key={i} className="flex items-start gap-2.5 text-[13px]" style={{ color: TEXT }}>
+                      <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: P }} />
+                      {a}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* Sidebar */}
+            <div className="col-span-2">
+              <div className="sticky top-4 border rounded-[10px] overflow-hidden" style={{ borderColor: BORDER }}>
+                <div className="px-4 py-3 border-b" style={{ borderColor: BORDER, backgroundColor: BG }}>
+                  <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Affected Endpoint</p>
+                </div>
+                <div className="p-4 flex flex-col gap-2.5 border-b" style={{ borderColor: BORDER }}>
+                  {[
+                    ["Hostname", "SERVER-MAIN-01"],
+                    ["OS", "Ubuntu 22.04 LTS"],
+                    ["Risk Score", "96 / 100"],
+                    ["Detection Time", "2024-01-15 14:23:07"],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex justify-between">
+                      <span className="text-[12px]" style={{ color: MUTED }}>{k}</span>
+                      <span className="text-[12px] font-semibold" style={{ color: TEXT }}>{v}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-4 py-3 border-b" style={{ borderColor: BORDER, backgroundColor: BG }}>
+                  <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Analyst Notes</p>
+                </div>
+                <div className="p-4">
+                  <textarea
+                    rows={5}
+                    className="w-full text-[12px] outline-none resize-none bg-transparent"
+                    style={{ color: TEXT }}
+                    defaultValue="Confirmed ransomware. Pattern matches LockBit 3.0 IOCs. No exfiltration evidence yet — network capture ongoing."
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center mt-6 pt-5 border-t" style={{ borderColor: BORDER }}>
+            <button className="text-[13px] hover:opacity-70 transition-opacity cursor-pointer font-medium" style={{ color: RED }}>Discard</button>
+            <button
+              onClick={() => setStep(2)}
+              className="h-10 px-6 rounded-[10px] text-[13px] font-semibold text-white flex items-center gap-2 cursor-pointer"
+              style={{ backgroundColor: P }}
+            >
+              Publish to Blockchain <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Stage 2 */}
+      {step === 2 && (
+        <div className="flex justify-center">
+          <div className="w-full max-w-[560px] bg-white border rounded-2xl p-7 shadow-sm" style={{ borderColor: BORDER }}>
+            <h2 className="text-[18px] font-bold mb-1" style={{ color: TEXT }}>{"You're about to publish this CTI report."}</h2>
+            <p className="text-[13px] mb-5" style={{ color: MUTED }}>This action is permanent and cannot be reversed.</p>
+
+            <div className="p-4 rounded-[10px] border mb-5" style={{ borderColor: BORDER, backgroundColor: BG }}>
+              <p className="text-[11px] font-bold uppercase tracking-wide mb-3" style={{ color: MUTED }}>What will be published on-chain</p>
+              {[
+                ["Report hash (SHA-256)", "3f2a1b4c5d6e7f8a..."],
+                ["Attack type", "Ransomware"],
+                ["Timestamp", "2024-01-15 14:23:07 UTC"],
+                ["Author org hash", "Anonymized"],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between py-1.5">
+                  <span className="text-[12px]" style={{ color: MUTED }}>{k}</span>
+                  <span className="text-[12px] font-semibold" style={{ color: TEXT, fontFamily: "var(--font-mono, monospace)" }}>{v}</span>
+                </div>
+              ))}
+              <div className="mt-3 flex items-center gap-1.5 text-[11px]" style={{ color: GREEN }}>
+                <Lock className="w-3 h-3" /> No sensitive files included
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 mb-6">
+              <p className="text-[12px] font-semibold" style={{ color: MUTED }}>Visibility</p>
+              <div className="flex gap-2">
+                {(["org", "network"] as const).map(v => (
+                  <button
+                    key={v}
+                    onClick={() => setVisibility(v)}
+                    className="flex-1 py-2.5 rounded-lg text-[13px] font-medium border transition-colors cursor-pointer"
+                    style={{
+                      borderColor: visibility === v ? P : BORDER,
+                      backgroundColor: visibility === v ? "rgba(23,49,62,0.07)" : "white",
+                      color: visibility === v ? P : MUTED,
+                    }}
+                  >
+                    {v === "org" ? "Organization Only" : "Network-wide"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {publishing
+              ? (
+                <div className="flex flex-col items-center py-5 gap-3">
+                  <Loader2 className="w-6 h-6 animate-spin" style={{ color: STORM }} />
+                  <p className="text-[13px]" style={{ color: MUTED }}>Publishing to Polygon...</p>
+                  <div className="w-full h-1 rounded-full overflow-hidden" style={{ backgroundColor: BORDER }}>
+                    <div className="h-1 rounded-full w-2/3 animate-pulse" style={{ backgroundColor: STORM }} />
+                  </div>
+                </div>
+              )
+              : (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setStep(1)}
+                    className="flex-1 h-10 rounded-[10px] text-[13px] font-medium border hover:bg-gray-50 transition-colors cursor-pointer"
+                    style={{ borderColor: BORDER, color: TEXT }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={doPublish}
+                    className="flex-1 h-10 rounded-[10px] text-[13px] font-semibold text-white cursor-pointer"
+                    style={{ backgroundColor: P }}
+                  >
+                    Confirm & Publish
+                  </button>
+                </div>
+              )
+            }
+          </div>
+        </div>
+      )}
+
+      {/* Stage 3 */}
+      {step === 3 && (
+        <div className="flex flex-col items-center gap-5">
+          <div className="w-full px-5 py-3 rounded-xl flex items-center gap-2 text-[13px] font-medium"
+            style={{ backgroundColor: "rgba(22,163,74,0.08)", color: GREEN }}>
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+            CTI published successfully. Transaction confirmed on Polygon.
+          </div>
+          <div className="w-full max-w-[560px] bg-white border rounded-2xl p-7 shadow-sm" style={{ borderColor: BORDER }}>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-[16px] font-bold" style={{ color: TEXT }}>Blockchain Verification</h2>
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold"
+                style={{ backgroundColor: "rgba(22,163,74,0.1)", color: GREEN }}>
+                <Check className="w-3.5 h-3.5" /> Verified
+              </span>
+            </div>
+            {[
+              ["Transaction Hash", "0x4a7b9c2f1d8e3a6b5c0f2e1d..."],
+              ["Block Number", "47,291,834"],
+              ["Timestamp", "2024-01-15 14:31:22 UTC"],
+              ["Network", "Polygon Mainnet"],
+            ].map(([k, v]) => (
+              <div key={k} className="flex justify-between py-2.5 border-b" style={{ borderColor: BORDER }}>
+                <span className="text-[12px]" style={{ color: MUTED }}>{k}</span>
+                <span className="text-[12px]" style={{ color: TEXT, fontFamily: "var(--font-mono, monospace)" }}>{v}</span>
+              </div>
+            ))}
+            <div className="mt-5 flex items-center justify-between">
+              <button className="text-[13px] hover:opacity-70 cursor-pointer font-medium" style={{ color: MUTED }} onClick={() => setStep(1)}>
+                Publish another report
+              </button>
+              <button className="flex items-center gap-1.5 h-9 px-4 rounded-lg text-[13px] font-medium border hover:bg-gray-50 transition-colors cursor-pointer"
+                style={{ borderColor: BORDER, color: TEXT }}>
+                <ExternalLink className="w-3.5 h-3.5" /> Open in Block Explorer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  )
+  );
 }
 
 export default function CTICenterPage() {
-  const {
-    ctiReports, globalFeed, navigate, publishCTI, discardCTI,
-    ctiLoading, ctiError, refetchCTI, feedLoading, feedError,
-  } = useApp()
-  const router = useRouter()
-  const [tab, setTab] = useState<'my' | 'feed'>('my')
-  const [publishingId, setPublishingId] = useState<string | null>(null)
-  const [publishError, setPublishError] = useState<string | null>(null)
-  const [discardTarget, setDiscardTarget] = useState<string | null>(null)
-  const [discarding, setDiscarding] = useState(false)
-
-  const handlePublish = async (id: string) => {
-    setPublishingId(id)
-    setPublishError(null)
-    try {
-      await publishCTI(id)
-    } catch (err: unknown) {
-      setPublishError(err instanceof Error ? err.message : 'Publishing failed')
-    } finally {
-      setPublishingId(null)
-    }
-  }
-
-  const handleDiscard = async () => {
-    if (!discardTarget) return
-    setDiscarding(true)
-    await discardCTI(discardTarget)
-    setDiscarding(false)
-    setDiscardTarget(null)
-  }
-
-  const myReports = [...ctiReports].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  const feed = [...globalFeed].sort((a, b) => new Date(b.publishedAt!).getTime() - new Date(a.publishedAt!).getTime())
-
-  const isLoading = tab === 'my' ? ctiLoading : feedLoading
-  const hasError = tab === 'my' ? ctiError : feedError
-
-  const editDraft = (id: string) => {
-    navigate('cti-draft-editor', { id })
-    router.push(`/cti-draft-editor?id=${id}`)
-  }
-
   return (
-    <div className="p-6 space-y-4">
-      {/* Tabs */}
-      <div className="flex items-center justify-between">
-        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
-          <button
-            onClick={() => setTab('my')}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${tab === 'my' ? 'bg-white text-navy-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            My Organization's Reports
-          </button>
-          <button
-            onClick={() => setTab('feed')}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${tab === 'feed' ? 'bg-white text-navy-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Global CTI Feed
-          </button>
-        </div>
-        <button
-          onClick={refetchCTI}
-          className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-          title="Refresh"
-        >
-          <RefreshCw size={14} />
-        </button>
-      </div>
-
-      {publishError && (
-        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-xl">
-          <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
-          <span className="text-sm text-red-700 flex-1">{publishError}</span>
-          <button onClick={() => setPublishError(null)} className="text-xs text-red-600 underline cursor-pointer">Dismiss</button>
-        </div>
-      )}
-
-      {hasError && (
-        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-xl">
-          <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
-          <span className="text-sm text-red-700 flex-1">{hasError}</span>
-          <Button size="sm" variant="secondary" onClick={refetchCTI}>Retry</Button>
-        </div>
-      )}
-
-      {/* My Reports */}
-      {tab === 'my' && (
-        <div className="space-y-3">
-          {isLoading ? (
-            [...Array(3)].map((_, i) => <SkeletonCard key={i} />)
-          ) : myReports.length === 0 ? (
-            <Card>
-              <EmptyState
-                icon={<Globe size={40} />}
-                title="No CTI reports yet"
-                message="Generate a CTI report from a detection to share verified threat intelligence with the community."
-              />
-            </Card>
-          ) : (
-            myReports.map(r => (
-              <Card key={r._id} className="p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <CTIStatusBadge status={r.status} />
-                      {r.verificationStatus !== 'PENDING' && <VerificationBadge status={r.verificationStatus} />}
-                      <span className="text-[10px] font-mono text-slate-400">{fmt(r.createdAt)}</span>
-                    </div>
-                    <p className="text-sm text-slate-800 leading-relaxed line-clamp-3">{r.attackSummary}</p>
-                    {r.transactionHash && (
-                      <div className="mt-2">
-                        <TxHash hash={r.transactionHash} blockNumber={r.blockNumber} />
-                      </div>
-                    )}
-                    {r.publishedAt && (
-                      <p className="text-[11px] text-slate-400 mt-1.5">Published {fmt(r.publishedAt)}</p>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                    {r.status === 'DRAFT' && (
-                      <>
-                        {publishingId === r._id ? (
-                          <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-                            <Loader2 size={13} className="animate-spin" />
-                            Publishing to Polygon… (this may take up to 60s)
-                          </div>
-                        ) : (
-                          <Button size="sm" onClick={() => handlePublish(r._id)} disabled={publishingId !== null}>
-                            Publish to Blockchain
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => editDraft(r._id)}
-                          disabled={publishingId === r._id}
-                        >
-                          <Edit2 size={13} /> Edit Draft
-                        </Button>
-                        <button
-                          onClick={() => setDiscardTarget(r._id)}
-                          className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors cursor-pointer"
-                          disabled={publishingId === r._id}
-                        >
-                          <Trash2 size={12} /> Discard
-                        </button>
-                      </>
-                    )}
-                    {r.status === 'PUBLISHED' && (
-                      <Button size="sm" variant="secondary" onClick={() => editDraft(r._id)}>
-                        View Report
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* Global Feed */}
-      {tab === 'feed' && (
-        <div className="space-y-3">
-          {isLoading ? (
-            [...Array(3)].map((_, i) => <SkeletonCard key={i} />)
-          ) : feed.length === 0 ? (
-            <Card>
-              <EmptyState
-                icon={<Globe size={40} />}
-                title="No published intelligence"
-                message="No published reports in the global feed yet."
-              />
-            </Card>
-          ) : (
-            feed.map(r => (
-              <Card key={r._id} className="p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <span className="text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
-                        Anonymous Organization
-                      </span>
-                      <VerificationBadge status={r.verificationStatus} />
-                      {r.publishedAt && <span className="text-[10px] font-mono text-slate-400">{fmt(r.publishedAt)}</span>}
-                    </div>
-                    <p className="text-sm text-slate-800 leading-relaxed mb-3">{r.attackSummary}</p>
-                    <div className="space-y-1 mb-3">
-                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Indicators of Compromise</p>
-                      <ul className="space-y-1">
-                        {r.indicatorsOfCompromise.slice(0, 3).map((ioc, i) => (
-                          <li key={i} className="text-xs text-slate-600 font-mono bg-slate-50 rounded px-2 py-1">{ioc}</li>
-                        ))}
-                        {r.indicatorsOfCompromise.length > 3 && (
-                          <li className="text-xs text-slate-400">+{r.indicatorsOfCompromise.length - 3} more</li>
-                        )}
-                      </ul>
-                    </div>
-                    {r.transactionHash && <TxHash hash={r.transactionHash} blockNumber={r.blockNumber} />}
-                  </div>
-                </div>
-              </Card>
-            ))
-          )}
-        </div>
-      )}
-
-      <ConfirmModal
-        open={!!discardTarget}
-        onClose={() => setDiscardTarget(null)}
-        onConfirm={handleDiscard}
-        title="Discard CTI Draft"
-        message="This draft will be permanently deleted. This action cannot be undone."
-        confirmLabel="Discard Draft"
-        danger
-        loading={discarding}
-      />
-    </div>
+    <Layout>
+      <CTICenterContent />
+    </Layout>
   )
 }

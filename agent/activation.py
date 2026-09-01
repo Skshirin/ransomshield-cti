@@ -2,20 +2,43 @@ import requests
 import config as cfg
 
 
-def activate_agent():
-    """
-    Resolves which organization/endpoint this agent belongs to. If
-    ORGANIZATION_ID and ENDPOINT_ID are already set manually in .env (the
-    old flow from earlier milestones), those are used directly and no
-    network call happens - keeps existing setups working unchanged.
+def save_activation_details(env_file_path: str, org_id: str, endpoint_id: str):
+    import os
+    # Persist the newly obtained ids to the configured dotenv file
+    if not os.path.exists(env_file_path):
+        with open(env_file_path, "w") as f:
+            f.write(f"ORGANIZATION_ID={org_id}\n")
+            f.write(f"ENDPOINT_ID={endpoint_id}\n")
+        return
 
-    Otherwise, calls the backend's /activate endpoint with ACTIVATION_TOKEN,
-    matching the "paste token, agent goes ONLINE" flow shown in the
-    dashboard's Add Endpoint modal. Mutates cfg.ORGANIZATION_ID and
-    cfg.ENDPOINT_ID directly on the config module so every other module
-    that reads them at call time (not at import time) picks up the
-    resolved values immediately.
-    """
+    with open(env_file_path, "r") as f:
+        lines = f.readlines()
+
+    new_lines = []
+    org_updated = False
+    endpoint_updated = False
+
+    for line in lines:
+        if line.strip().startswith("ORGANIZATION_ID="):
+            new_lines.append(f"ORGANIZATION_ID={org_id}\n")
+            org_updated = True
+        elif line.strip().startswith("ENDPOINT_ID="):
+            new_lines.append(f"ENDPOINT_ID={endpoint_id}\n")
+            endpoint_updated = True
+        else:
+            new_lines.append(line)
+
+    if not org_updated:
+        new_lines.append(f"ORGANIZATION_ID={org_id}\n")
+    if not endpoint_updated:
+        new_lines.append(f"ENDPOINT_ID={endpoint_id}\n")
+
+    with open(env_file_path, "w") as f:
+        f.writelines(new_lines)
+    print(f"[activation] Persisted ORGANIZATION_ID and ENDPOINT_ID to {env_file_path}")
+
+
+def activate_agent():
     if cfg.ORGANIZATION_ID and cfg.ENDPOINT_ID:
         print("[activation] Using manually configured ORGANIZATION_ID/ENDPOINT_ID")
         return
@@ -38,3 +61,8 @@ def activate_agent():
     cfg.ORGANIZATION_ID = data["organizationId"]
     cfg.ENDPOINT_ID = data["endpointId"]
     print(f"[activation] Activated. organizationId={cfg.ORGANIZATION_ID} endpointId={cfg.ENDPOINT_ID}")
+
+    try:
+        save_activation_details(cfg.ENV_FILE_PATH, cfg.ORGANIZATION_ID, cfg.ENDPOINT_ID)
+    except Exception as e:
+        print(f"[activation] Warning: could not persist activation details to file: {e}")

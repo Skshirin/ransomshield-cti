@@ -4,7 +4,158 @@ import { type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes, ty
 import { X, CheckCircle2, AlertCircle, Info, Loader2 } from 'lucide-react'
 import type { DetectionSeverity, DetectionStatus, EndpointStatus, CTIStatus, VerificationStatus, UserRole, Toast } from '@/lib/types'
 
-// ── Badge ──────────────────────────────────────────────────────────────────
+// ── Figma Design System Tokens ───────────────────────────────────────────────
+export const P = "#17313E";     // primary dark teal
+export const STORM = "#415E72"; // storm blue
+export const LAV = "#C5B0CD";   // lavender haze
+export const BG = "#F8FAFC";
+export const TEXT = "#111827";
+export const MUTED = "#6B7280";
+export const BORDER = "#E5E7EB";
+export const RED = "#DC2626";
+export const AMBER = "#F59E0B";
+export const GREEN = "#16A34A";
+
+// ── Figma Datasets ────────────────────────────────────────────────────────────
+export const lineData = [
+  { d: 1, v: 3 }, { d: 2, v: 5 }, { d: 3, v: 2 }, { d: 4, v: 8 },
+  { d: 5, v: 12 }, { d: 6, v: 6 }, { d: 7, v: 3 }, { d: 8, v: 4 },
+  { d: 9, v: 7 }, { d: 10, v: 9 }, { d: 11, v: 14 }, { d: 12, v: 11 },
+  { d: 13, v: 5 }, { d: 14, v: 3 }, { d: 15, v: 8 }, { d: 16, v: 6 },
+  { d: 17, v: 4 }, { d: 18, v: 9 }, { d: 19, v: 16 }, { d: 20, v: 13 },
+  { d: 21, v: 7 }, { d: 22, v: 5 }, { d: 23, v: 3 }, { d: 24, v: 6 },
+  { d: 25, v: 8 }, { d: 26, v: 11 }, { d: 27, v: 9 }, { d: 28, v: 4 },
+  { d: 29, v: 6 }, { d: 30, v: 3 },
+];
+
+export const pieData = [
+  { name: "Online", value: 48, color: GREEN },
+  { name: "Offline", value: 2, color: MUTED },
+  { name: "At Risk", value: 3, color: AMBER },
+];
+
+export const riskData = [
+  { label: "Low", count: 24, color: GREEN },
+  { label: "Medium", count: 14, color: AMBER },
+  { label: "High", count: 8, color: "#F97316" },
+  { label: "Critical", count: 3, color: RED },
+];
+
+export const ENDPOINTS = [
+  { id: 1, name: "WORKSTATION-A01", status: "Online", lastSeen: "2 min ago", os: "Windows 11 22H2", cpu: 34, ram: 62, disk: 45 },
+  { id: 2, name: "WORKSTATION-B07", status: "Online", lastSeen: "5 min ago", os: "Windows 10 21H2", cpu: 78, ram: 81, disk: 67 },
+  { id: 3, name: "SERVER-MAIN-01", status: "At Risk", lastSeen: "12 min ago", os: "Ubuntu 22.04 LTS", cpu: 91, ram: 87, disk: 73 },
+  { id: 4, name: "LAPTOP-EXEC-04", status: "Offline", lastSeen: "3 hrs ago", os: "macOS Ventura 13.4", cpu: 0, ram: 0, disk: 0 },
+  { id: 5, name: "WORKSTATION-C12", status: "Online", lastSeen: "1 min ago", os: "Windows 11 22H2", cpu: 22, ram: 41, disk: 38 },
+  { id: 6, name: "SERVER-DB-02", status: "Online", lastSeen: "8 min ago", os: "Ubuntu 20.04 LTS", cpu: 55, ram: 69, disk: 82 },
+];
+
+export const DETECTIONS = [
+  { id: 1, time: "2024-01-15 14:23:07", endpoint: "SERVER-MAIN-01", score: 96, status: "New", severity: "Critical" },
+  { id: 2, time: "2024-01-15 11:04:33", endpoint: "WORKSTATION-B07", score: 72, status: "Investigating", severity: "High" },
+  { id: 3, time: "2024-01-14 22:17:51", endpoint: "LAPTOP-EXEC-04", score: 38, status: "Resolved", severity: "Low" },
+  { id: 4, time: "2024-01-14 09:42:18", endpoint: "WORKSTATION-A01", score: 61, status: "Resolved", severity: "Medium" },
+  { id: 5, time: "2024-01-13 16:55:44", endpoint: "SERVER-DB-02", score: 88, status: "New", severity: "High" },
+];
+
+export const CTI_FEED = [
+  { id: 1, org: "ThreatWatch Inc.", type: "Ransomware", preview: "LockBit 3.0 variant detected targeting healthcare sector infrastructure via RDP brute-force...", time: "2 hrs ago", verified: true },
+  { id: 2, org: "Anonymous", type: "Phishing", preview: "Credential harvesting campaign using fake Microsoft 365 login pages, spoofing internal IT...", time: "5 hrs ago", verified: true },
+  { id: 3, org: "CyberSentinel", type: "Supply Chain", preview: "Compromised npm package 'auth-utils@2.1.4' exfiltrating environment variables on install...", time: "1 day ago", verified: false },
+  { id: 4, org: "RedTeam Labs", type: "Ransomware", preview: "Novel encryption routine targeting network shares with double-extortion ransom demand...", time: "2 days ago", verified: true },
+];
+
+// ── Figma Core Components ───────────────────────────────────────────────────
+export function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { bg: string; color: string }> = {
+    Online:       { bg: "#DCFCE7", color: GREEN },
+    Offline:      { bg: "#F3F4F6", color: MUTED },
+    "At Risk":    { bg: "#FEF3C7", color: "#92400E" },
+    New:          { bg: "#EEF2FF", color: "#4338CA" },
+    Investigating:{ bg: "#FEF3C7", color: "#92400E" },
+    Resolved:     { bg: "#DCFCE7", color: GREEN },
+  };
+  const s = map[status] ?? { bg: "#F3F4F6", color: MUTED };
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold"
+      style={{ backgroundColor: s.bg, color: s.color }}
+    >
+      {status}
+    </span>
+  );
+}
+
+export function ScoreBadge({ score }: { score: number }) {
+  const bg = score > 75 ? RED : score > 40 ? AMBER : GREEN;
+  return (
+    <span
+      className="inline-flex items-center justify-center w-9 h-9 rounded-full text-[12px] font-bold text-white flex-shrink-0"
+      style={{ backgroundColor: bg }}
+    >
+      {score}
+    </span>
+  );
+}
+
+export function FieldInput({
+  label, type = "text", placeholder, value, onChange, error, right,
+}: {
+  label?: string; type?: string; placeholder?: string;
+  value: string; onChange: (v: string) => void;
+  error?: string | null; right?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {label && (
+        <label className="text-[13px] font-medium" style={{ color: MUTED }}>{label}</label>
+      )}
+      <div className="relative">
+        <input
+          type={type}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full h-11 px-3 rounded-xl text-[14px] border outline-none transition-colors"
+          style={{
+            borderColor: error ? RED : BORDER,
+            backgroundColor: error ? "rgba(220,38,38,0.04)" : "white",
+            color: TEXT,
+          }}
+        />
+        {right && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">{right}</div>
+        )}
+      </div>
+      {error && <p className="text-[12px]" style={{ color: RED }}>{error}</p>}
+    </div>
+  );
+}
+
+export function PrimaryBtn({
+  children, onClick, disabled, loading, full = true,
+}: {
+  children: React.ReactNode; onClick?: () => void;
+  disabled?: boolean; loading?: boolean; full?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled || loading}
+      className="h-11 px-5 rounded-[10px] text-[14px] font-semibold text-white flex items-center justify-center gap-2 transition-opacity"
+      style={{
+        width: full ? "100%" : undefined,
+        backgroundColor: disabled ? BORDER : P,
+        color: disabled ? MUTED : "white",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: loading ? 0.85 : 1,
+      }}
+    >
+      {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+      {children}
+    </button>
+  );
+}
 
 const severityStyles: Record<DetectionSeverity, string> = {
   CRITICAL: 'bg-red-100 text-red-700 border border-red-200',
@@ -114,6 +265,9 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'sm' | 'md' | 'lg'
   loading?: boolean
   children: ReactNode
+  onClick?: React.MouseEventHandler<HTMLButtonElement>
+  className?: string
+  disabled?: boolean
 }
 
 export function Button({ variant = 'primary', size = 'md', loading, children, className = '', disabled, ...props }: ButtonProps) {
@@ -194,6 +348,11 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string
   error?: string
   icon?: ReactNode
+  placeholder?: string
+  value?: string | number | readonly string[]
+  onChange?: React.ChangeEventHandler<HTMLInputElement>
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>
+  type?: string
 }
 
 export function Input({ label, error, icon, className = '', ...props }: InputProps) {
@@ -220,6 +379,12 @@ export function Input({ label, error, icon, className = '', ...props }: InputPro
 
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string
+  value?: string
+  onChange?: React.ChangeEventHandler<HTMLTextAreaElement>
+  rows?: number
+  placeholder?: string
+  disabled?: boolean
+  className?: string
 }
 
 export function Textarea({ label, className = '', ...props }: TextareaProps) {
@@ -236,7 +401,16 @@ export function Textarea({ label, className = '', ...props }: TextareaProps) {
 
 // ── Select ─────────────────────────────────────────────────────────────────
 
-export function Select({ label, children, className = '', ...props }: { label?: string; children: ReactNode; className?: string } & React.SelectHTMLAttributes<HTMLSelectElement>) {
+interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+  label?: string
+  children: ReactNode
+  className?: string
+  value?: string | number | readonly string[]
+  onChange?: React.ChangeEventHandler<HTMLSelectElement>
+  disabled?: boolean
+}
+
+export function Select({ label, children, className = '', ...props }: SelectProps) {
   return (
     <div className="space-y-1">
       {label && <label className="block text-sm font-medium text-slate-700">{label}</label>}

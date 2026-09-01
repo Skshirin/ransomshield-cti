@@ -115,7 +115,7 @@ export async function apiGet<T>(path: string): Promise<T> {
   const res = await apiFetch(path, { method: 'GET' })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }))
-    throw new ApiError(err.message ?? res.statusText, res.status)
+    throw new ApiError(err.error ?? err.message ?? res.statusText, res.status)
   }
   return res.json()
 }
@@ -127,7 +127,7 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }))
-    throw new ApiError(err.message ?? res.statusText, res.status)
+    throw new ApiError(err.error ?? err.message ?? res.statusText, res.status)
   }
   return res.json()
 }
@@ -139,7 +139,7 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }))
-    throw new ApiError(err.message ?? res.statusText, res.status)
+    throw new ApiError(err.error ?? err.message ?? res.statusText, res.status)
   }
   return res.json()
 }
@@ -148,7 +148,7 @@ export async function apiDelete<T>(path: string): Promise<T> {
   const res = await apiFetch(path, { method: 'DELETE' })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }))
-    throw new ApiError(err.message ?? res.statusText, res.status)
+    throw new ApiError(err.error ?? err.message ?? res.statusText, res.status)
   }
   return res.json()
 }
