@@ -45,7 +45,7 @@ def activate_agent():
 
     if not cfg.ACTIVATION_TOKEN:
         raise RuntimeError(
-            "No ACTIVATION_TOKEN and no ORGANIZATION_ID/ENDPOINT_ID set in agent/.env - "
+            f"No ACTIVATION_TOKEN and no ORGANIZATION_ID/ENDPOINT_ID configured in {cfg.ENV_FILE_PATH} - "
             "the agent cannot start. Set one or the other."
         )
 

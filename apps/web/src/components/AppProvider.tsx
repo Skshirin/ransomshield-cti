@@ -49,14 +49,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [pageParams, setPageParams] = useState<Record<string, string>>({})
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  // Data states
-  const [endpointState, setEndpointState] = useState<ListState<Endpoint>>(initList(mockEndpoints))
-  const [detectionState, setDetectionState] = useState<ListState<Detection>>(initList(mockDetections))
-  const [ctiState, setCtiState] = useState<ListState<CTIReport>>(initList(mockCTIReports))
-  const [teamState, setTeamState] = useState<ListState<TeamUser>>(initList(mockTeamUsers))
+  // Data states (initialized with empty lists - populated from real backend API)
+  const [endpointState, setEndpointState] = useState<ListState<Endpoint>>(initList([]))
+  const [detectionState, setDetectionState] = useState<ListState<Detection>>(initList([]))
+  const [ctiState, setCtiState] = useState<ListState<CTIReport>>(initList([]))
+  const [teamState, setTeamState] = useState<ListState<TeamUser>>(initList([]))
   const [invitationState, setInvitationState] = useState<ListState<Invitation>>(initList([]))
-  const [auditState, setAuditState] = useState<ListState<AuditLog>>(initList(mockAuditLogs))
-  const [feedState, setFeedState] = useState<ListState<CTIReport>>(initList(mockGlobalCTIFeed))
+  const [auditState, setAuditState] = useState<ListState<AuditLog>>(initList([]))
+  const [feedState, setFeedState] = useState<ListState<CTIReport>>(initList([]))
 
   const currentUserRef = useRef<CurrentUser | null>(null)
   currentUserRef.current = currentUser
@@ -178,9 +178,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
     socket.off('detection:new')
     socket.off('detection:resolved')
     socket.off('cti:published')
+    socket.off('endpoint:new')
+    socket.off('endpoint:updated')
+    socket.off('endpoint:heartbeat')
+    socket.off('endpoint:removed')
+
+    socket.on('endpoint:new', (endpoint: Endpoint) => {
+      setEndpointState(s => {
+        if (s.data.some(e => e._id === endpoint._id)) return s
+        return { ...s, data: [endpoint, ...s.data] }
+      })
+    })
+
+    socket.on('endpoint:updated', (endpoint: Endpoint) => {
+      setEndpointState(s => ({
+        ...s,
+        data: s.data.map(e => (e._id === endpoint._id ? { ...e, ...endpoint } : e)),
+      }))
+    })
+
+    socket.on('endpoint:heartbeat', (endpoint: Endpoint) => {
+      setEndpointState(s => ({
+        ...s,
+        data: s.data.map(e => (e._id === endpoint._id ? { ...e, ...endpoint, status: endpoint.status || 'ONLINE' } : e)),
+      }))
+    })
+
+    socket.on('endpoint:removed', ({ endpointId }: { endpointId: string }) => {
+      setEndpointState(s => ({
+        ...s,
+        data: s.data.filter(e => e._id !== endpointId),
+      }))
+    })
 
     socket.on('detection:new', (detection: Detection) => {
-      setDetectionState(s => ({ ...s, data: [detection, ...s.data] }))
+      setDetectionState(s => {
+        if (s.data.some(d => d._id === detection._id)) return s
+        return { ...s, data: [detection, ...s.data] }
+      })
+      setEndpointState(s => ({
+        ...s,
+        data: s.data.map(e => (e._id === detection.endpointId ? { ...e, status: 'AT_RISK' } : e)),
+      }))
       showToast(
         `New ${detection.severity} detection on ${detection.endpointName} — Risk score: ${detection.riskScore}`,
         detection.severity === 'CRITICAL' || detection.severity === 'HIGH' ? 'error' : 'info',
@@ -192,6 +231,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...s,
         data: s.data.map(d => (d._id === detection._id ? detection : d)),
       }))
+      fetchEndpoints()
       showToast(
         `Detection on ${detection.endpointName} marked as ${detection.status === 'FALSE_POSITIVE' ? 'False Positive' : 'Resolved'}`,
         'success',
@@ -205,7 +245,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }))
       showToast('CTI Report published to blockchain and verified', 'success')
     })
-  }, [showToast])
+  }, [showToast, fetchEndpoints])
+
+  // Periodic polling for live heartbeat/detection sync
+  useEffect(() => {
+    if (!currentUser) return
+    const interval = setInterval(() => {
+      fetchEndpoints()
+      fetchDetections()
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [currentUser, fetchEndpoints, fetchDetections])
 
   // Session Restoration Effect
   useEffect(() => {

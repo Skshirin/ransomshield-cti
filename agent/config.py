@@ -4,18 +4,30 @@ import sys
 from dotenv import load_dotenv
 
 # Check if command line argument specifies a custom env file
-env_file = ".env"
-for arg in sys.argv:
+env_file = None
+for i, arg in enumerate(sys.argv):
     if arg.startswith("--env-file="):
         env_file = arg.split("=", 1)[1]
         break
+    elif arg in ("--env-file", "-e") and i + 1 < len(sys.argv):
+        env_file = sys.argv[i + 1]
+        break
+    elif arg.startswith("-e="):
+        env_file = arg.split("=", 1)[1]
+        break
 
-# Or fallback to environment variable
-if env_file == ".env":
+# Fallback to environment variable or default .env
+if not env_file:
     env_file = os.getenv("ENV_FILE", ".env")
 
-# If custom env file path is provided, load it
 ENV_FILE_PATH = env_file
+
+# If relative path does not exist in CWD, check relative to the agent/ directory
+if not os.path.isabs(ENV_FILE_PATH) and not os.path.exists(ENV_FILE_PATH):
+    agent_dir_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ENV_FILE_PATH)
+    if os.path.exists(agent_dir_path):
+        ENV_FILE_PATH = agent_dir_path
+
 if os.path.exists(ENV_FILE_PATH):
     print(f"[config] Loading settings from: {os.path.abspath(ENV_FILE_PATH)}")
     load_dotenv(dotenv_path=ENV_FILE_PATH, override=True)

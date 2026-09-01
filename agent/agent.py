@@ -211,12 +211,29 @@ class CSVLogger:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class Agent:
-    def __init__(self, csv_path: Optional[str] = None, no_model: bool = False):
+    def __init__(
+        self,
+        csv_path: Optional[str] = None,
+        no_model: bool = False,
+        mode: Optional[str] = None,
+        scenario: Optional[str] = None,
+    ):
+        self.telemetry_mode = (mode or cfg.TELEMETRY_MODE).lower()
+        self.scenario = (scenario or cfg.SIMULATION_SCENARIO).lower()
+
+        # Automatic activation hook: if endpoint ID is not present but activation token is set, activate
+        if not cfg.ENDPOINT_ID and cfg.ACTIVATION_TOKEN:
+            try:
+                from activation import activate_agent
+                activate_agent()
+            except Exception as e:
+                cprint(f"[Agent] Activation attempt failed: {e}", YELLOW)
+
         # Select provider based on configuration mode
-        if cfg.TELEMETRY_MODE == "simulated":
+        if self.telemetry_mode == "simulated":
             from telemetry_provider import SimulatedTelemetryProvider
-            self.reader = SimulatedTelemetryProvider(scenario=cfg.SIMULATION_SCENARIO)
-            cprint(f"[Agent] Telemetry Mode: SIMULATED (Scenario: {cfg.SIMULATION_SCENARIO.upper()})", GREEN)
+            self.reader = SimulatedTelemetryProvider(scenario=self.scenario)
+            cprint(f"[Agent] Telemetry Mode: SIMULATED (Scenario: {self.scenario.upper()})", GREEN)
         else:
             from telemetry_provider import WindowsTelemetryProvider
             self.reader = WindowsTelemetryProvider()
@@ -501,14 +518,25 @@ class Agent:
             return
 
         try:
-            import psutil
             import requests
 
-            payload = {
-                "cpuUsagePercent": round(psutil.cpu_percent(), 1),
-                "ramUsagePercent": round(psutil.virtual_memory().percent, 1),
-                "diskUsagePercent": round(psutil.disk_usage('/').percent, 1)
-            }
+            if self.telemetry_mode == "simulated":
+                # Strict simulated heartbeat isolation: never inspect host psutil / OS metrics
+                import random
+                payload = {
+                    "cpuUsagePercent": round(random.uniform(10.0, 25.0), 1),
+                    "ramUsagePercent": round(random.uniform(35.0, 48.0), 1),
+                    "diskUsagePercent": round(random.uniform(28.0, 35.0), 1)
+                }
+            else:
+                # Real agent reads physical host metrics
+                import psutil
+                payload = {
+                    "cpuUsagePercent": round(psutil.cpu_percent(), 1),
+                    "ramUsagePercent": round(psutil.virtual_memory().percent, 1),
+                    "diskUsagePercent": round(psutil.disk_usage('/').percent, 1)
+                }
+
             headers = {"x-api-key": cfg.BACKEND_API_KEY}
 
             url = f"{cfg.BACKEND_API_URL}/api/endpoints/{cfg.ENDPOINT_ID}/heartbeat"
@@ -532,7 +560,7 @@ class Agent:
                 "indicators": [
                     f"Ransomware activity detected in process {process_name} (PID {pid})",
                     f"EMA detection score: {score:.3f}",
-                    "Simulated ransomware telemetry indicators detected" if cfg.TELEMETRY_MODE == "simulated" else "Real Sysmon events triggered local XGBoost thresholds"
+                    "Simulated ransomware telemetry indicators detected" if self.telemetry_mode == "simulated" else "Real Sysmon events triggered local XGBoost thresholds"
                 ],
                 "modelVersion": "agent-v0.1"
             }
@@ -550,7 +578,7 @@ class Agent:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="Ransomware Detection Agent")
+    parser = argparse.ArgumentParser(description="SentinelIQ Ransomware Detection Agent")
     parser.add_argument(
         "--csv", metavar="PATH",
         help="Save feature vectors to CSV (e.g. --csv output.csv)"
@@ -559,11 +587,25 @@ def main():
         "--no-model", action="store_true",
         help="Run in feature-extraction mode without a model"
     )
+    parser.add_argument(
+        "--env-file", "-e", metavar="PATH",
+        help="Path to custom .env file (e.g. --env-file=.env.agent2)"
+    )
+    parser.add_argument(
+        "--mode", choices=["real", "simulated"],
+        help="Override TELEMETRY_MODE ('real' or 'simulated')"
+    )
+    parser.add_argument(
+        "--scenario", choices=["normal", "ransomware"],
+        help="Override SIMULATION_SCENARIO ('normal' or 'ransomware')"
+    )
     args = parser.parse_args()
 
     agent = Agent(
         csv_path=args.csv,
         no_model=args.no_model,
+        mode=args.mode,
+        scenario=args.scenario,
     )
     agent.run()
 

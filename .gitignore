@@ -16,3 +16,4 @@ apps/ml-service/app/ml/*.pkl
 apps/ml-service/app/ml/*.json
 apps/ml-service/venv/
 .vscode/
+.env*
