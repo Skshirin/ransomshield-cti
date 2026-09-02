@@ -173,6 +173,51 @@ class TestTelemetryIsolation(unittest.TestCase):
         self.assertEqual(state.update(0.90), "CRITICAL")
         self.assertTrue(state.critical_fired)
 
+    @patch("requests.post")
+    def test_11_heartbeat_sends_correct_payload(self, mock_post):
+        """11. Heartbeat sends correct stats payload to backend."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "ONLINE"}
+        mock_post.return_value = mock_response
+
+        with patch.object(cfg, "ENDPOINT_ID", "ep_test_001"), \
+             patch.object(cfg, "BACKEND_API_URL", "http://localhost:4000"), \
+             patch.object(cfg, "BACKEND_API_KEY", "test_key"):
+            agent = Agent(no_model=True, mode="simulated", scenario="normal")
+            agent._send_heartbeat()
+
+            self.assertTrue(mock_post.called)
+            call_args = mock_post.call_args
+            self.assertIn("/api/endpoints/ep_test_001/heartbeat", call_args[0][0])
+            self.assertEqual(call_args[1]["headers"]["x-api-key"], "test_key")
+            payload = call_args[1]["json"]
+            self.assertIn("cpuUsagePercent", payload)
+            self.assertIn("ramUsagePercent", payload)
+            self.assertIn("diskUsagePercent", payload)
+
+    @patch("requests.post")
+    def test_12_heartbeat_handles_429_graceful_backoff(self, mock_post):
+        """12. Heartbeat handles HTTP 429 with graceful exponential backoff."""
+        mock_429 = MagicMock()
+        mock_429.status_code = 429
+        mock_429.headers = {"Retry-After": "20"}
+        mock_post.return_value = mock_429
+
+        with patch.object(cfg, "ENDPOINT_ID", "ep_test_001"), \
+             patch.object(cfg, "BACKEND_API_URL", "http://localhost:4000"), \
+             patch.object(cfg, "BACKEND_API_KEY", "test_key"):
+            agent = Agent(no_model=True, mode="simulated", scenario="normal")
+            
+            # First call receives 429
+            agent._send_heartbeat()
+            self.assertEqual(mock_post.call_count, 1)
+            self.assertGreater(agent._heartbeat_backoff_until, 0.0)
+
+            # Second immediate call should back off without making network request
+            agent._send_heartbeat()
+            self.assertEqual(mock_post.call_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

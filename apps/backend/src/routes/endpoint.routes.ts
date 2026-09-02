@@ -3,6 +3,7 @@ import { requireAuth, requireRole } from "../middleware/auth.middleware";
 import { requireServiceApiKey } from "../middleware/serviceAuth.middleware";
 import { asyncHandler } from "../utils/asyncHandler";
 import { auditLog } from "../middleware/auditLog.middleware";
+import { heartbeatLimiter } from "../middleware/rateLimiter.middleware";
 import {
   addEndpoint,
   getEndpoints,
@@ -20,7 +21,7 @@ const router = Router();
 router.post("/activate", asyncHandler(activate));
 
 // Heartbeat route for machine-to-machine check-ins from the agent
-router.post("/:id/heartbeat", requireServiceApiKey, asyncHandler(heartbeat));
+router.post("/:id/heartbeat", requireServiceApiKey, heartbeatLimiter, asyncHandler(heartbeat));
 
 router.use(requireAuth);
 

@@ -151,6 +151,7 @@ class ProcessState:
         self.ema_score: float = 0.0
         self.consecutive_alerts: int = 0
         self.critical_fired: bool = False
+        self.alert_reported: bool = False
         self.last_seen: datetime = datetime.now(timezone.utc)
 
     def update(self, raw_score: float) -> str:
@@ -163,7 +164,7 @@ class ProcessState:
         else:
             self.consecutive_alerts = 0
 
-        if self.consecutive_alerts >= CRITICAL_CONSECUTIVE and not self.critical_fired:
+        if self.consecutive_alerts >= CRITICAL_CONSECUTIVE:
             self.critical_fired = True
             return "CRITICAL"
         if self.ema_score >= ALERT_THRESHOLD:
@@ -270,6 +271,10 @@ class Agent:
         # Stats
         self._total_events_seen = 0
         self._total_windows_scored = 0
+
+        # Heartbeat backoff state
+        self._heartbeat_backoff_until: float = 0.0
+        self._heartbeat_backoff_delay: float = 15.0
 
     # ── Whitelist check ───────────────────────────────────────────────────────
 
@@ -474,7 +479,13 @@ class Agent:
                             f"{'!'*60}",
                             RED, bold=True
                         )
-                        self._report_ransomware_alert(result["pid"], result["process_name"], result["ema_score"])
+                        state = self._process_states.get(result["pid"])
+                        if state and not state.alert_reported:
+                            reported = self._report_ransomware_alert(result["pid"], result["process_name"], result["ema_score"])
+                            if reported:
+                                state.alert_reported = True
+                        elif not state:
+                            self._report_ransomware_alert(result["pid"], result["process_name"], result["ema_score"])
 
                 # Send heartbeat every 3 steps (approx. 9-10 seconds)
                 if step % 3 == 0:
@@ -517,6 +528,12 @@ class Agent:
         if not cfg.ENDPOINT_ID:
             return
 
+        now = time.monotonic()
+        if now < self._heartbeat_backoff_until:
+            remaining = self._heartbeat_backoff_until - now
+            cprint(f"  [Heartbeat] Rate limited (429) previously. Backing off for {remaining:.1f}s...", YELLOW)
+            return
+
         try:
             import requests
 
@@ -541,26 +558,64 @@ class Agent:
 
             url = f"{cfg.BACKEND_API_URL}/api/endpoints/{cfg.ENDPOINT_ID}/heartbeat"
             response = requests.post(url, json=payload, headers=headers, timeout=5)
+
+            if response.status_code == 429:
+                retry_after = response.headers.get("Retry-After")
+                if retry_after and retry_after.isdigit():
+                    delay = max(5.0, float(retry_after))
+                else:
+                    delay = self._heartbeat_backoff_delay
+                    self._heartbeat_backoff_delay = min(120.0, self._heartbeat_backoff_delay * 2)
+
+                self._heartbeat_backoff_until = now + delay
+                cprint(f"  [Heartbeat] Rate limited (429). Backing off for {delay:.0f}s...", YELLOW)
+                return
+
             response.raise_for_status()
+
+            # Successful heartbeat: reset backoff
+            self._heartbeat_backoff_delay = 15.0
+            self._heartbeat_backoff_until = 0.0
             cprint(f"  [Heartbeat] Stats sent. Status: {response.json().get('status')}", GREEN)
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 429:
+                delay = self._heartbeat_backoff_delay
+                self._heartbeat_backoff_delay = min(120.0, self._heartbeat_backoff_delay * 2)
+                self._heartbeat_backoff_until = now + delay
+                cprint(f"  [Heartbeat] Rate limited (429). Backing off for {delay:.0f}s...", YELLOW)
+            else:
+                cprint(f"  [Heartbeat] Failed to send: {e}", YELLOW)
         except Exception as e:
             cprint(f"  [Heartbeat] Failed to send: {e}", YELLOW)
 
-    def _report_ransomware_alert(self, pid: int, process_name: str, score: float):
+    def _report_ransomware_alert(self, pid: int, process_name: str, score: float) -> bool:
         """Sends a critical ransomware detection alert to the backend."""
         if not cfg.ENDPOINT_ID or not cfg.AUTO_REPORT_DETECTIONS:
-            return
+            return False
 
         try:
             import requests
+            now_iso = datetime.now(timezone.utc).isoformat()
             payload = {
                 "organizationId": cfg.ORGANIZATION_ID,
                 "endpointId": cfg.ENDPOINT_ID,
                 "riskScore": int(round(score * 100)),
                 "indicators": [
-                    f"Ransomware activity detected in process {process_name} (PID {pid})",
-                    f"EMA detection score: {score:.3f}",
-                    "Simulated ransomware telemetry indicators detected" if self.telemetry_mode == "simulated" else "Real Sysmon events triggered local XGBoost thresholds"
+                    {
+                        "type": "PROCESS_ANOMALY",
+                        "description": f"Ransomware activity detected in process {process_name} (PID {pid})",
+                        "observedAt": now_iso
+                    },
+                    {
+                        "type": "EMA_THRESHOLD",
+                        "description": f"EMA detection score: {score:.3f}",
+                        "observedAt": now_iso
+                    },
+                    {
+                        "type": "TELEMETRY_PATTERN",
+                        "description": "Simulated ransomware telemetry indicators detected" if self.telemetry_mode == "simulated" else "Real Sysmon events triggered local XGBoost thresholds",
+                        "observedAt": now_iso
+                    }
                 ],
                 "modelVersion": "agent-v0.1"
             }
@@ -569,8 +624,10 @@ class Agent:
             response = requests.post(url, json=payload, headers=headers, timeout=5)
             response.raise_for_status()
             cprint("  [Detection] Alert reported to backend successfully.", GREEN)
+            return True
         except Exception as e:
             cprint(f"  [Detection] Failed to report alert to backend: {e}", RED)
+            return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────

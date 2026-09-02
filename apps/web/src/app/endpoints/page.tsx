@@ -259,9 +259,9 @@ function EndpointsContent() {
 
       {/* Add Endpoint Modal */}
       {addOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/20" onClick={() => setAddOpen(false)} />
-          <div className="relative w-[480px] bg-white rounded-2xl shadow-2xl p-7 z-10">
+          <div className="relative w-full max-w-[480px] bg-white rounded-2xl shadow-2xl p-7 z-10">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-[18px] font-bold" style={{ color: TEXT }}>Add New Endpoint</h2>
               <button onClick={() => setAddOpen(false)} className="hover:opacity-70 cursor-pointer">
@@ -284,33 +284,55 @@ function EndpointsContent() {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col gap-4">
-                <div>
+              <div className="flex flex-col gap-4 min-w-0">
+                <div className="min-w-0">
                   <p className="text-[12px] font-semibold mb-2" style={{ color: MUTED }}>Generated Activation Token</p>
-                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border"
-                    style={{ borderColor: BORDER, backgroundColor: BG }}>
-                    <span className="flex-1 text-[12px] truncate" style={{ color: TEXT, fontFamily: "var(--font-mono, monospace)" }}>
+                  <div
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg border min-w-0"
+                    style={{ borderColor: BORDER, backgroundColor: BG }}
+                  >
+                    <span
+                      className="flex-1 min-w-0 text-[12px] truncate select-all"
+                      title={generatedToken}
+                      style={{
+                        color: TEXT,
+                        fontFamily: "var(--font-mono, monospace)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       {generatedToken}
                     </span>
-                    <button onClick={() => handleCopy(generatedToken)} className="p-1 hover:bg-gray-100 rounded cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(generatedToken)}
+                      className="flex-shrink-0 p-1 hover:bg-gray-100 rounded cursor-pointer transition-colors"
+                      title="Copy activation token"
+                    >
                       {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" style={{ color: MUTED }} />}
                     </button>
                   </div>
                   <p className="text-[11px] mt-1 text-amber-600">Save this token. It acts as the activation credential for the agent process.</p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-[12px] font-semibold mb-2.5" style={{ color: MUTED }}>Installation Steps</p>
                   {[
                     "Add ACTIVATION_TOKEN=" + generatedToken + " in the agent's .env file",
                     "Launch agent: python agent/main.py --env-file=<path-to-env>",
                     "The endpoint will automatically connect, activate, and appear ONLINE",
                   ].map((s, i) => (
-                    <div key={i} className="flex gap-3 mb-2.5">
+                    <div key={i} className="flex items-start gap-3 mb-2.5 min-w-0">
                       <span
-                        className="w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center flex-shrink-0 text-white"
+                        className="w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center flex-shrink-0 text-white mt-0.5"
                         style={{ backgroundColor: P }}
                       >{i + 1}</span>
-                      <span className="text-[13px]" style={{ color: TEXT }}>{s}</span>
+                      <span
+                        className="flex-1 min-w-0 text-[13px] leading-snug break-all"
+                        style={{ color: TEXT }}
+                      >
+                        {s}
+                      </span>
                     </div>
                   ))}
                 </div>

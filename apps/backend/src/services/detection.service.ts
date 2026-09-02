@@ -8,7 +8,7 @@ interface CreateDetectionInput {
   organizationId: string;
   endpointId: string;
   riskScore: number;
-  indicators: BehaviourIndicator[];
+  indicators: (BehaviourIndicator | string)[];
   modelVersion?: string;
   detectedAt?: Date;
 }
@@ -24,13 +24,29 @@ export async function createDetection(input: CreateDetectionInput) {
     throw new AppError("Endpoint not found for this organization", 404);
   }
 
+  // Normalize indicators whether they are strings or structured objects
+  const formattedIndicators = (input.indicators || []).map((ind: any) => {
+    if (typeof ind === "string") {
+      return {
+        type: "BEHAVIOUR_PATTERN",
+        description: ind,
+        observedAt: new Date(),
+      };
+    }
+    return {
+      type: ind.type || "BEHAVIOUR_PATTERN",
+      description: ind.description || String(ind),
+      observedAt: ind.observedAt ? new Date(ind.observedAt) : new Date(),
+    };
+  });
+
   const detection = await DetectionModel.create({
     organizationId: input.organizationId,
     endpointId: endpoint._id,
     endpointName: endpoint.name,
     riskScore: input.riskScore,
     severity: severityFromRiskScore(input.riskScore),
-    indicators: input.indicators,
+    indicators: formattedIndicators,
     modelVersion: input.modelVersion,
     detectedAt: input.detectedAt ?? new Date(),
   });
