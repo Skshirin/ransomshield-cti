@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ChevronLeft, Clock, Globe, CheckCircle2, XCircle, Loader2, AlertCircle } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { SeverityBadge, DetectionStatusBadge, Button, ConfirmModal, Card } from '@/components/ui'
+import { ResponseTimeline } from '@/components/ResponseTimeline'
 import { apiGet } from '@/lib/api'
 import type { Detection } from '@/lib/types'
 
@@ -248,6 +249,11 @@ export default function DetectionDetailPage({ params }: { params: Promise<{ id: 
             Analyzing detection data and generating CTI draft…
           </div>
         )}
+      </Card>
+
+      {/* Incident & Response Timeline */}
+      <Card className="p-5">
+        <ResponseTimeline detectionId={detection._id} endpointId={detection.endpointId} />
       </Card>
 
       <ConfirmModal

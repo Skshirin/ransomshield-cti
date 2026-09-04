@@ -1,6 +1,6 @@
 import { Schema, model, Document, Types } from "mongoose";
 
-export type EndpointStatus = "PENDING" | "ONLINE" | "OFFLINE" | "AT_RISK";
+export type EndpointStatus = "PENDING" | "ONLINE" | "OFFLINE" | "AT_RISK" | "ISOLATED";
 
 export interface EndpointDocument extends Document {
   organizationId: Types.ObjectId;
@@ -31,7 +31,7 @@ const endpointSchema = new Schema<EndpointDocument>(
     name: { type: String, required: true, trim: true },
     status: {
       type: String,
-      enum: ["PENDING", "ONLINE", "OFFLINE", "AT_RISK"],
+      enum: ["PENDING", "ONLINE", "OFFLINE", "AT_RISK", "ISOLATED"],
       default: "PENDING",
     },
     osVersion: { type: String },

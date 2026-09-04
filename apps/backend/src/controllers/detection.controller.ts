@@ -54,7 +54,7 @@ export async function getDetection(req: AuthenticatedRequest, res: Response) {
 export async function markResolved(req: AuthenticatedRequest, res: Response) {
   const organizationId = req.user!.organizationId;
   const userId = req.user!.userId;
-  const { outcome } = req.body as { outcome?: "RESOLVED" | "FALSE_POSITIVE" };
+  const { outcome = "RESOLVED" } = (req.body || {}) as { outcome?: "RESOLVED" | "FALSE_POSITIVE" };
 
   if (outcome !== "RESOLVED" && outcome !== "FALSE_POSITIVE") {
     throw new AppError('outcome must be "RESOLVED" or "FALSE_POSITIVE"', 400);

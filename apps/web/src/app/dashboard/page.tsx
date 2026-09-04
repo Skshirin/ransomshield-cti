@@ -21,6 +21,7 @@ function DashboardContent() {
   const onlineCount = endpoints.filter(e => e.status === 'ONLINE').length
   const offlineCount = endpoints.filter(e => e.status === 'OFFLINE' || e.status === 'PENDING').length
   const atRiskCount = endpoints.filter(e => e.status === 'AT_RISK').length
+  const isolatedCount = endpoints.filter(e => e.status === 'ISOLATED').length
 
   // ── 2. Detection metrics ─────────────────────────────────────────────────────
   const activeDetections = detections.filter(
@@ -61,7 +62,8 @@ function DashboardContent() {
     { name: "Online", value: onlineCount, color: GREEN },
     { name: "Offline", value: offlineCount, color: MUTED },
     { name: "At Risk", value: atRiskCount, color: AMBER },
-  ], [onlineCount, offlineCount, atRiskCount])
+    ...(isolatedCount > 0 ? [{ name: "Isolated", value: isolatedCount, color: "#9333EA" }] : []),
+  ], [onlineCount, offlineCount, atRiskCount, isolatedCount])
 
   const hasEndpoints = totalEndpoints > 0
   const renderedPieData = hasEndpoints
@@ -103,7 +105,7 @@ function DashboardContent() {
           {
             label: "ENDPOINTS ONLINE",
             value: `${onlineCount} / ${totalEndpoints}`,
-            sub: `${offlineCount} offline`,
+            sub: `${offlineCount} offline${isolatedCount > 0 ? `, ${isolatedCount} isolated` : ''}`,
             dot: onlineCount > 0 ? GREEN : MUTED,
           },
           {

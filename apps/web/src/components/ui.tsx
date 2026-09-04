@@ -71,6 +71,8 @@ export function StatusBadge({ status }: { status: string }) {
     Online:       { bg: "#DCFCE7", color: GREEN },
     Offline:      { bg: "#F3F4F6", color: MUTED },
     "At Risk":    { bg: "#FEF3C7", color: "#92400E" },
+    Isolated:     { bg: "#F3E8FF", color: "#7E22CE" },
+    ISOLATED:     { bg: "#F3E8FF", color: "#7E22CE" },
     New:          { bg: "#EEF2FF", color: "#4338CA" },
     Investigating:{ bg: "#FEF3C7", color: "#92400E" },
     Resolved:     { bg: "#DCFCE7", color: GREEN },
@@ -176,6 +178,7 @@ const endpointStatusStyles: Record<EndpointStatus, string> = {
   OFFLINE: 'bg-slate-100 text-slate-500 border border-slate-200',
   AT_RISK: 'bg-red-50 text-red-600 border border-red-200',
   PENDING: 'bg-amber-50 text-amber-700 border border-amber-200',
+  ISOLATED: 'bg-purple-50 text-purple-700 border border-purple-200',
 }
 
 const ctiStatusStyles: Record<CTIStatus, string> = {
@@ -225,6 +228,7 @@ export function EndpointStatusBadge({ status }: { status: EndpointStatus }) {
     OFFLINE: 'bg-slate-400',
     AT_RISK: 'bg-red-500',
     PENDING: 'bg-amber-500',
+    ISOLATED: 'bg-purple-500',
   }
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${endpointStatusStyles[status]}`}>

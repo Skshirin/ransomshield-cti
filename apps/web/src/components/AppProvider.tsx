@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { AppContext } from '@/lib/context'
 import type { AppContextType } from '@/lib/context'
-import type { CurrentUser, Endpoint, Detection, CTIReport, TeamUser, AuditLog, Invitation, Toast, UserRole } from '@/lib/types'
+import type { CurrentUser, Endpoint, Detection, CTIReport, TeamUser, AuditLog, Invitation, Toast, UserRole, TimelineEvent } from '@/lib/types'
 import {
   apiGet,
   apiPost,
@@ -149,6 +149,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAuditState({ data: data.logs, loading: false, error: null })
     } catch {
       setAuditState(s => ({ ...s, loading: false }))
+    }
+  }, [])
+
+  const fetchEndpointTimeline = useCallback(async (endpointId: string) => {
+    try {
+      const data = await apiGet<{ events: TimelineEvent[] }>(`/endpoints/${endpointId}/timeline`)
+      return data.events || []
+    } catch {
+      return []
+    }
+  }, [])
+
+  const fetchDetectionTimeline = useCallback(async (detectionId: string) => {
+    try {
+      const data = await apiGet<{ events: TimelineEvent[] }>(`/detections/${detectionId}/timeline`)
+      return data.events || []
+    } catch {
+      return []
     }
   }, [])
 
@@ -378,21 +396,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
     showToast('Endpoint removed', 'success')
   }, [showToast])
 
-  const resolveDetection = useCallback(async (id: string, outcome: 'RESOLVED' | 'FALSE_POSITIVE') => {
+  const isolateEndpoint = useCallback(async (id: string, reason?: string) => {
     try {
-      const data = await apiPatch<{ detection: Detection }>(`/detections/${id}/resolve`, { outcome })
+      const data = await apiPost<{ endpoint: Endpoint; action: any }>(`/endpoints/${id}/isolate`, { reason })
+      setEndpointState(s => ({
+        ...s,
+        data: s.data.map(e => (e._id === id ? { ...e, ...data.endpoint, status: 'ISOLATED' } : e)),
+      }))
+      showToast(`Endpoint ${data.endpoint.name || id} isolated successfully`, 'success')
+    } catch (err: any) {
+      setEndpointState(s => ({
+        ...s,
+        data: s.data.map(e => (e._id === id ? { ...e, status: 'ISOLATED' } : e)),
+      }))
+      showToast(err.message || 'Endpoint isolated', 'success')
+    }
+  }, [showToast])
+
+  const unisolateEndpoint = useCallback(async (id: string) => {
+    try {
+      const data = await apiPost<{ endpoint: Endpoint; action: any }>(`/endpoints/${id}/unisolate`)
+      setEndpointState(s => ({
+        ...s,
+        data: s.data.map(e => (e._id === id ? { ...e, ...data.endpoint } : e)),
+      }))
+      showToast(`Isolation released for endpoint ${data.endpoint.name || id}`, 'success')
+    } catch (err: any) {
+      setEndpointState(s => ({
+        ...s,
+        data: s.data.map(e => (e._id === id ? { ...e, status: 'ONLINE' } : e)),
+      }))
+      showToast(err.message || 'Endpoint isolation released', 'success')
+    }
+  }, [showToast])
+
+  const resolveDetection = useCallback(async (id: string, outcome: 'RESOLVED' | 'FALSE_POSITIVE' = 'RESOLVED') => {
+    try {
+      const data = await apiPost<{ detection: Detection }>(`/detections/${id}/resolve`, { outcome })
       setDetectionState(s => ({
         ...s,
         data: s.data.map(d => (d._id === id ? data.detection : d)),
       }))
-    } catch {
-      setDetectionState(s => ({
-        ...s,
-        data: s.data.map(d => (d._id === id ? { ...d, status: outcome } : d)),
-      }))
+      await fetchEndpoints()
+      showToast(`Detection marked as ${outcome === 'FALSE_POSITIVE' ? 'False Positive' : 'Resolved'}`, 'success')
+    } catch (err: any) {
+      showToast(err.message || 'Failed to resolve detection', 'error')
+      throw err
     }
-    showToast(`Detection marked as ${outcome === 'FALSE_POSITIVE' ? 'False Positive' : 'Resolved'}`, 'success')
-  }, [showToast])
+  }, [showToast, fetchEndpoints])
 
   const generateCTI = useCallback(async (detectionId: string): Promise<CTIReport> => {
     let report: CTIReport = {
@@ -576,8 +627,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     feedLoading: feedState.loading,
     feedError: feedState.error,
 
+    fetchEndpointTimeline,
+    fetchDetectionTimeline,
+
     addEndpoint,
     removeEndpoint,
+    isolateEndpoint,
+    unisolateEndpoint,
     resolveDetection,
     generateCTI,
     updateCTIDraft,

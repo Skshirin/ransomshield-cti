@@ -2,9 +2,10 @@
 
 import { useEffect, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, Cpu, HardDrive, Activity, AlertCircle, Clock } from 'lucide-react'
+import { ChevronLeft, Cpu, HardDrive, Activity, AlertCircle, Clock, CheckCircle2 } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { EndpointStatusBadge, SeverityBadge, DetectionStatusBadge, ResourceBar, Card } from '@/components/ui'
+import { ResponseTimeline } from '@/components/ResponseTimeline'
 import { apiGet } from '@/lib/api'
 import type { Endpoint } from '@/lib/types'
 
@@ -44,11 +45,12 @@ export default function EndpointDetailPage({ params }: { params: Promise<{ id: s
   const resolvedParams = use(params)
   const id = resolvedParams.id
   const router = useRouter()
-  const { detections, navigate, pageParams, endpoints: listEndpoints } = useApp()
+  const { detections, resolveDetection, navigate, pageParams, endpoints: listEndpoints } = useApp()
   const endpointId = id || pageParams.id
   const [endpoint, setEndpoint] = useState<Endpoint | null>(
     listEndpoints.find(e => e._id === endpointId) ?? null,
   )
+  const [resolvingDetId, setResolvingDetId] = useState<string | null>(null)
   const [loading, setLoading] = useState(!endpoint)
   const [error, setError] = useState<string | null>(null)
 
@@ -175,34 +177,63 @@ export default function EndpointDetailPage({ params }: { params: Promise<{ id: s
           </div>
         ) : (
           <div className="divide-y divide-slate-50">
-            {endpointDetections.map(det => (
-              <button
-                key={det._id}
-                onClick={() => {
-                  navigate('detection-detail', { id: det._id })
-                  router.push(`/detections/${det._id}`)
-                }}
-                className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50/70 transition-colors text-left cursor-pointer"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <SeverityBadge severity={det.severity} />
-                    <span className="text-xs text-slate-500">{det.indicators[0]?.type}</span>
+            {endpointDetections.map(det => {
+              const isActive = det.status === 'NEW' || det.status === 'INVESTIGATING'
+              return (
+                <div
+                  key={det._id}
+                  onClick={() => {
+                    navigate('detection-detail', { id: det._id })
+                    router.push(`/detections/${det._id}`)
+                  }}
+                  className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50/70 transition-colors text-left cursor-pointer"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <SeverityBadge severity={det.severity} />
+                      <span className="text-xs text-slate-500">{det.indicators[0]?.type}</span>
+                    </div>
+                    <p className="text-sm text-slate-700 truncate">{det.indicators[0]?.description}</p>
                   </div>
-                  <p className="text-sm text-slate-700 truncate">{det.indicators[0]?.description}</p>
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <span className="text-2xl font-bold font-mono text-slate-800">{det.riskScore}</span>
-                  <DetectionStatusBadge status={det.status} />
-                  <div className="flex items-center gap-1 text-[10px] text-slate-400 hidden sm:flex">
-                    <Clock size={10} />
-                    {new Date(det.detectedAt).toLocaleDateString()}
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className="text-2xl font-bold font-mono text-slate-800">{det.riskScore}</span>
+                    <DetectionStatusBadge status={det.status} />
+                    {isActive ? (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          setResolvingDetId(det._id)
+                          try {
+                            await resolveDetection(det._id, 'RESOLVED')
+                          } catch {
+                            // Toast handled by provider
+                          } finally {
+                            setResolvingDetId(null)
+                          }
+                        }}
+                        disabled={resolvingDetId === det._id}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+                      >
+                        <CheckCircle2 size={13} />
+                        {resolvingDetId === det._id ? 'Resolving...' : 'Resolve'}
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-1 text-[10px] text-slate-400 hidden sm:flex">
+                        <Clock size={10} />
+                        {new Date(det.detectedAt).toLocaleDateString()}
+                      </div>
+                    )}
                   </div>
                 </div>
-              </button>
-            ))}
+              )
+            })}
           </div>
         )}
+      </Card>
+
+      {/* Incident & Response Timeline */}
+      <Card className="p-5">
+        <ResponseTimeline endpointId={endpoint._id} />
       </Card>
     </div>
   )

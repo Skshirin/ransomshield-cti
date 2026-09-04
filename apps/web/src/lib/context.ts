@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { CurrentUser, Endpoint, Detection, CTIReport, TeamUser, AuditLog, Invitation, Toast, UserRole } from './types'
+import type { CurrentUser, Endpoint, Detection, CTIReport, TeamUser, AuditLog, Invitation, Toast, UserRole, TimelineEvent } from './types'
 
 export interface AppContextType {
   // Auth
@@ -52,10 +52,16 @@ export interface AppContextType {
   feedLoading: boolean
   feedError: string | null
 
+  // Timeline
+  fetchEndpointTimeline: (endpointId: string) => Promise<TimelineEvent[]>
+  fetchDetectionTimeline: (detectionId: string) => Promise<TimelineEvent[]>
+
   // Mutations
   addEndpoint: (name: string) => Promise<{ endpoint: Endpoint; activationToken: string; installInstructions: string }>
   removeEndpoint: (id: string) => Promise<void>
-  resolveDetection: (id: string, outcome: 'RESOLVED' | 'FALSE_POSITIVE') => Promise<void>
+  isolateEndpoint: (id: string, reason?: string) => Promise<void>
+  unisolateEndpoint: (id: string) => Promise<void>
+  resolveDetection: (id: string, outcome?: 'RESOLVED' | 'FALSE_POSITIVE') => Promise<void>
   generateCTI: (detectionId: string) => Promise<CTIReport>
   updateCTIDraft: (id: string, data: Partial<Pick<CTIReport, 'attackSummary' | 'analystNotes' | 'indicatorsOfCompromise' | 'recommendedActions'>>) => Promise<void>
   publishCTI: (id: string) => Promise<void>

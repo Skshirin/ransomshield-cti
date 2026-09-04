@@ -3,7 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
-import rateLimit from "express-rate-limit";
+import { generalLimiter } from "./middleware/rateLimiter.middleware";
 import { env } from "./config/env";
 import healthRoutes from "./routes/health.routes";
 import authRoutes from "./routes/auth.routes";
@@ -17,13 +17,7 @@ import { errorMiddleware } from "./middleware/error.middleware";
 export function createApp(): Application {
   const app = express();
 
-  const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
-  app.use(limiter);
+  app.use(generalLimiter);
 
   app.use(helmet());
   app.use(

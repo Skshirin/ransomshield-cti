@@ -7,6 +7,7 @@ import {
   P, STORM, BG, TEXT, MUTED, BORDER, RED, AMBER, GREEN,
   StatusBadge, ScoreBadge,
 } from '@/components/ui'
+import { ResponseTimeline } from '@/components/ResponseTimeline'
 import { useApp } from '@/lib/context'
 import type { Detection } from '@/lib/types'
 
@@ -14,6 +15,8 @@ function DetectionsContent() {
   const { detections, resolveDetection, generateCTI, showToast } = useApp()
   const [selected, setSelected] = useState<Detection | null>(null)
   const [resolved, setResolved] = useState(false)
+  const [resolvingId, setResolvingId] = useState<string | null>(null)
+  const [isResolvingDrawer, setIsResolvingDrawer] = useState(false)
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState("All")
 
@@ -25,21 +28,44 @@ function DetectionsContent() {
   }
 
   const filtered = detections.filter(d => {
+    const matchesFilter =
+      filter === "All" ||
+      (filter === "Active" && (d.status === "NEW" || d.status === "INVESTIGATING")) ||
+      (filter === "Resolved" && (d.status === "RESOLVED" || d.status === "FALSE_POSITIVE"))
     const matchesSearch =
       (d.endpointName || "").toLowerCase().includes(search.toLowerCase()) ||
       (d.status || "").toLowerCase().includes(search.toLowerCase()) ||
       (d.severity || "").toLowerCase().includes(search.toLowerCase())
-    return matchesSearch
+    return matchesFilter && matchesSearch
   })
+
+  const handleDirectResolve = async (detectionId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    setResolvingId(detectionId)
+    try {
+      await resolveDetection(detectionId, 'RESOLVED')
+      if (selected && selected._id === detectionId) {
+        setSelected(prev => prev ? { ...prev, status: 'RESOLVED', resolvedAt: new Date().toISOString() } : null)
+        setResolved(true)
+      }
+    } catch {
+      // Toast already shown by provider
+    } finally {
+      setResolvingId(null)
+    }
+  }
 
   const handleResolve = async (outcome: 'RESOLVED' | 'FALSE_POSITIVE') => {
     if (!selected) return
+    setIsResolvingDrawer(true)
     try {
       await resolveDetection(selected._id, outcome)
       setResolved(true)
-      setSelected(prev => prev ? { ...prev, status: outcome } : null)
+      setSelected(prev => prev ? { ...prev, status: outcome, resolvedAt: new Date().toISOString() } : null)
     } catch {
-      showToast("Failed to update detection status", "error")
+      // Toast already shown by provider
+    } finally {
+      setIsResolvingDrawer(false)
     }
   }
 
@@ -81,6 +107,20 @@ function DetectionsContent() {
             className="text-[12px] outline-none w-40 bg-transparent"
           />
         </div>
+        {["All", "Active", "Resolved"].map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className="px-3 h-8 rounded-lg text-[12px] font-medium border transition-colors cursor-pointer"
+            style={{
+              borderColor: filter === f ? P : BORDER,
+              backgroundColor: filter === f ? "rgba(23,49,62,0.07)" : "white",
+              color: filter === f ? P : MUTED,
+            }}
+          >
+            {f}
+          </button>
+        ))}
       </div>
 
       {/* Table */}
@@ -88,7 +128,7 @@ function DetectionsContent() {
         <table className="w-full">
           <thead>
             <tr className="bg-white border-b" style={{ borderColor: BORDER }}>
-              {["Date / Time", "Endpoint", "Risk Score", "Status", "Severity"].map(h => (
+              {["Date / Time", "Endpoint", "Risk Score", "Status", "Severity", "Action"].map(h => (
                 <th key={h} className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>{h}</th>
               ))}
             </tr>
@@ -96,7 +136,7 @@ function DetectionsContent() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-5 py-12 text-center text-[12px]" style={{ color: MUTED }}>
+                <td colSpan={6} className="px-5 py-12 text-center text-[12px]" style={{ color: MUTED }}>
                   <div className="flex flex-col items-center gap-2">
                     <ShieldCheck className="w-6 h-6 text-green-600" />
                     <span>No detections found. Endpoints are clean and operating normally.</span>
@@ -109,6 +149,7 @@ function DetectionsContent() {
                   ? new Date(d.detectedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' })
                   : 'Recent'
                 const isNew = d.status === 'NEW'
+                const isActive = d.status === 'NEW' || d.status === 'INVESTIGATING'
 
                 return (
                   <tr
@@ -136,6 +177,22 @@ function DetectionsContent() {
                         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: sevColor(d.severity) }} />
                         <span className="text-[12px] capitalize" style={{ color: MUTED }}>{d.severity || 'Medium'}</span>
                       </div>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {isActive ? (
+                        <button
+                          onClick={(e) => handleDirectResolve(d._id, e)}
+                          disabled={resolvingId === d._id}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          {resolvingId === d._id ? 'Resolving...' : 'Resolve'}
+                        </button>
+                      ) : (
+                        <span className="text-[11px] font-medium text-emerald-600 inline-flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Resolved
+                        </span>
+                      )}
                     </td>
                   </tr>
                 )
@@ -188,6 +245,24 @@ function DetectionsContent() {
                 </div>
               </div>
 
+              {/* Status details */}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide mb-3" style={{ color: MUTED }}>Status & Investigation</p>
+                <div className="p-3 rounded-lg border flex items-center justify-between" style={{ borderColor: BORDER, backgroundColor: BG }}>
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={selected.status || 'New'} />
+                    {selected.status === 'RESOLVED' && selected.resolvedAt && (
+                      <span className="text-[12px]" style={{ color: MUTED }}>
+                        Resolved on {new Date(selected.resolvedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[12px] font-medium" style={{ color: MUTED }}>
+                    Severity: <strong style={{ color: sevColor(selected.severity) }}>{selected.severity}</strong>
+                  </span>
+                </div>
+              </div>
+
               {/* Behaviour indicators */}
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-wide mb-3" style={{ color: MUTED }}>Observed Indicators</p>
@@ -205,29 +280,54 @@ function DetectionsContent() {
                   <p className="text-[12px]" style={{ color: MUTED }}>Simulated telemetry pattern matched local XGBoost model thresholds.</p>
                 )}
               </div>
+
+              {/* Response Action Timeline */}
+              <div className="pt-2 border-t" style={{ borderColor: BORDER }}>
+                <ResponseTimeline detectionId={selected._id} endpointId={selected.endpointId} />
+              </div>
             </div>
 
             <div className="sticky bottom-0 px-6 py-4 border-t bg-white flex items-center gap-3" style={{ borderColor: BORDER }}>
-              <button
-                onClick={() => handleResolve('FALSE_POSITIVE')}
-                className="text-[13px] hover:opacity-70 cursor-pointer text-gray-500"
-              >
-                Mark False Positive
-              </button>
-              <button
-                onClick={() => handleResolve('RESOLVED')}
-                className="ml-auto h-9 px-4 rounded-lg text-[13px] font-medium border hover:bg-gray-50 transition-colors cursor-pointer"
-                style={{ borderColor: BORDER, color: TEXT }}
-              >
-                Mark as Resolved
-              </button>
-              <button
-                onClick={handleGenerateCTI}
-                className="h-9 px-4 rounded-lg text-[13px] font-semibold text-white cursor-pointer"
-                style={{ backgroundColor: P }}
-              >
-                Generate CTI Report
-              </button>
+              {selected.status === 'NEW' || selected.status === 'INVESTIGATING' ? (
+                <>
+                  <button
+                    onClick={() => handleResolve('FALSE_POSITIVE')}
+                    disabled={isResolvingDrawer}
+                    className="text-[13px] hover:opacity-70 cursor-pointer text-gray-500 disabled:opacity-50"
+                  >
+                    Mark False Positive
+                  </button>
+                  <button
+                    onClick={() => handleResolve('RESOLVED')}
+                    disabled={isResolvingDrawer}
+                    className="ml-auto h-9 px-4 rounded-lg text-[13px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    {isResolvingDrawer ? 'Resolving...' : 'Resolve Detection'}
+                  </button>
+                  <button
+                    onClick={handleGenerateCTI}
+                    className="h-9 px-4 rounded-lg text-[13px] font-semibold text-white cursor-pointer"
+                    style={{ backgroundColor: P }}
+                  >
+                    Generate CTI Report
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Detection {selected.status === 'FALSE_POSITIVE' ? 'Marked False Positive' : 'Resolved'}</span>
+                  </div>
+                  <button
+                    onClick={handleGenerateCTI}
+                    className="ml-auto h-9 px-4 rounded-lg text-[13px] font-semibold text-white cursor-pointer"
+                    style={{ backgroundColor: P }}
+                  >
+                    Generate CTI Report
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -243,3 +343,4 @@ export default function DetectionsPage() {
     </Layout>
   )
 }
+
