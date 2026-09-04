@@ -144,7 +144,9 @@ export async function isolateEndpoint(
   organizationId: string,
   endpointId: string,
   userId?: string,
-  reason?: string
+  reason?: string,
+  actorTypeOverride?: TimelineActorType,
+  actorNameOverride?: string
 ) {
   const endpoint = await getEndpointById(organizationId, endpointId);
   const prevStatus = endpoint.status;
@@ -165,9 +167,9 @@ export async function isolateEndpoint(
   emitToOrganization(organizationId, "endpoint:updated", endpoint);
   emitToOrganization(organizationId, "endpoint:action", action);
 
-  let actorName = "Security Analyst";
-  let actorType: TimelineActorType = "SECURITY_ANALYST";
-  if (userId && Types.ObjectId.isValid(userId)) {
+  let actorName = actorNameOverride || "Security Analyst";
+  let actorType: TimelineActorType = actorTypeOverride || "SECURITY_ANALYST";
+  if (!actorTypeOverride && userId && Types.ObjectId.isValid(userId)) {
     const user = await UserModel.findById(userId).select("name email role");
     if (user) {
       actorName = user.name || user.email;

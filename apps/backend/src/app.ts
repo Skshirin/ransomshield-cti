@@ -12,6 +12,9 @@ import auditLogRoutes from "./routes/auditLog.routes";
 import detectionRoutes from "./routes/detection.routes";
 import ctiRoutes from "./routes/cti.routes";
 import userRoutes from "./routes/user.routes";
+import policyRoutes from "./routes/policy.routes";
+import cascadeRoutes from "./routes/cascade.routes";
+import threatIntelRoutes from "./routes/threatIntel.routes";
 import { errorMiddleware } from "./middleware/error.middleware";
 
 export function createApp(): Application {
@@ -48,6 +51,9 @@ export function createApp(): Application {
   app.use("/api/detections", detectionRoutes);
   app.use("/api/cti", ctiRoutes);
   app.use("/api/users", userRoutes);
+  app.use("/api/policies", policyRoutes);
+  app.use("/api/cascades", cascadeRoutes);
+  app.use("/api/threat-intel", threatIntelRoutes);
 
   app.use(errorMiddleware);
 
