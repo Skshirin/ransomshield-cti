@@ -9,6 +9,19 @@ export interface BehaviourIndicator {
   observedAt: Date;
 }
 
+export interface CTIMatchInfo {
+  matched: boolean;
+  indicator?: string;
+  type?: string;
+  isMalicious?: boolean;
+  confidence?: number;
+  severity?: string;
+  threatCategory?: string;
+  tags?: string[];
+  source?: string;
+  matchedAt?: Date;
+}
+
 export interface DetectionDocument extends Document {
   organizationId: Types.ObjectId;
   endpointId: Types.ObjectId;
@@ -21,6 +34,8 @@ export interface DetectionDocument extends Document {
   detectedAt: Date;
   resolvedAt?: Date;
   resolvedByUserId?: Types.ObjectId;
+  ctiMatch?: CTIMatchInfo;
+  cascadeId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,6 +45,22 @@ const behaviourIndicatorSchema = new Schema<BehaviourIndicator>(
     type: { type: String, required: true },
     description: { type: String, required: true },
     observedAt: { type: Date, required: true },
+  },
+  { _id: false }
+);
+
+const ctiMatchSchema = new Schema<CTIMatchInfo>(
+  {
+    matched: { type: Boolean, required: true, default: false },
+    indicator: { type: String },
+    type: { type: String },
+    isMalicious: { type: Boolean },
+    confidence: { type: Number },
+    severity: { type: String },
+    threatCategory: { type: String },
+    tags: [{ type: String }],
+    source: { type: String },
+    matchedAt: { type: Date },
   },
   { _id: false }
 );
@@ -62,6 +93,8 @@ const detectionSchema = new Schema<DetectionDocument>(
     detectedAt: { type: Date, required: true, default: Date.now },
     resolvedAt: { type: Date },
     resolvedByUserId: { type: Schema.Types.ObjectId, ref: "User" },
+    ctiMatch: { type: ctiMatchSchema },
+    cascadeId: { type: String, index: true },
   },
   { timestamps: true }
 );

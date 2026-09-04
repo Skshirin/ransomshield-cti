@@ -6,6 +6,9 @@ import { AppError } from "../middleware/error.middleware";
 import { emitToOrganization } from "../websocket/socket";
 import { recordTimelineEvent } from "./timeline.service";
 import { TimelineActorType } from "../models/timelineEvent.model";
+import { threatIntelService } from "./cti/threatIntel.service";
+import { correlateCascade } from "./cascade.service";
+import { evaluatePolicies } from "./policy.service";
 
 interface CreateDetectionInput {
   organizationId: string;
@@ -43,6 +46,23 @@ export async function createDetection(input: CreateDetectionInput) {
     };
   });
 
+  // 1. CTI Threat Intelligence Correlation
+  const ctiResult = await threatIntelService.correlateDetection(formattedIndicators);
+  const ctiMatchData = ctiResult.matched
+    ? {
+        matched: true,
+        indicator: ctiResult.indicator,
+        type: ctiResult.type,
+        isMalicious: ctiResult.isMalicious,
+        confidence: ctiResult.confidence,
+        severity: ctiResult.severity,
+        threatCategory: ctiResult.threatCategory,
+        tags: ctiResult.tags,
+        source: ctiResult.source,
+        matchedAt: new Date(),
+      }
+    : undefined;
+
   const detection = await DetectionModel.create({
     organizationId: input.organizationId,
     endpointId: endpoint._id,
@@ -52,6 +72,7 @@ export async function createDetection(input: CreateDetectionInput) {
     indicators: formattedIndicators,
     modelVersion: input.modelVersion,
     detectedAt: input.detectedAt ?? new Date(),
+    ctiMatch: ctiMatchData,
   });
 
   const prevStatus = endpoint.status;
@@ -79,6 +100,7 @@ export async function createDetection(input: CreateDetectionInput) {
       severity: detection.severity,
       indicators: formattedIndicators,
       modelVersion: input.modelVersion,
+      ctiMatched: Boolean(ctiMatchData?.matched),
     },
     timestamp: detection.detectedAt,
   });
@@ -100,6 +122,65 @@ export async function createDetection(input: CreateDetectionInput) {
       timestamp: detection.detectedAt,
     });
   }
+
+  // Record CTI Match timeline event & emit Socket.IO
+  if (ctiMatchData?.matched) {
+    emitToOrganization(input.organizationId, "cti:match", {
+      detectionId: detection._id.toString(),
+      endpointId: endpoint._id.toString(),
+      endpointName: endpoint.name,
+      ctiMatch: ctiMatchData,
+    });
+
+    await recordTimelineEvent({
+      organizationId: input.organizationId,
+      endpointId: endpoint._id,
+      endpointName: endpoint.name,
+      detectionId: detection._id,
+      eventType: "CTI_MATCHED",
+      actorType: "SYSTEM",
+      message: `Threat Intel matched IOC "${ctiMatchData.indicator}" (${ctiMatchData.threatCategory}) — Confidence: ${ctiMatchData.confidence}%`,
+      metadata: {
+        indicator: ctiMatchData.indicator,
+        type: ctiMatchData.type,
+        threatCategory: ctiMatchData.threatCategory,
+        confidence: ctiMatchData.confidence,
+        severity: ctiMatchData.severity,
+        source: ctiMatchData.source,
+      },
+      timestamp: new Date(),
+    });
+  }
+
+  // 2. Cross-Endpoint Attack / Cascade Correlation
+  const cascade = await correlateCascade(detection);
+
+  // 3. Automated Response Policy Evaluation
+  const consecutiveDetectionsCount = await DetectionModel.countDocuments({
+    organizationId: input.organizationId,
+    endpointId: endpoint._id,
+    status: { $in: ["NEW", "INVESTIGATING"] },
+  });
+
+  await evaluatePolicies({
+    organizationId: input.organizationId,
+    endpointId: endpoint._id.toString(),
+    endpointName: endpoint.name,
+    endpointStatus: endpoint.status,
+    detectionId: detection._id.toString(),
+    riskScore: detection.riskScore,
+    severity: detection.severity,
+    consecutiveDetections: consecutiveDetectionsCount,
+    ctiMatch: Boolean(ctiMatchData?.matched),
+    ctiConfidence: ctiMatchData?.confidence,
+    maliciousIocMatch: Boolean(ctiMatchData?.isMalicious),
+    iocValue: ctiMatchData?.indicator,
+    iocType: ctiMatchData?.type,
+    affectedEndpointCount: cascade ? cascade.affectedEndpointIds.length : 1,
+    crossEndpointAttack: Boolean(cascade),
+    cascadeId: cascade?.cascadeId,
+    cascadeSeverity: cascade?.severity,
+  });
 
   return detection;
 }
