@@ -235,10 +235,14 @@ class Agent:
             from telemetry_provider import SimulatedTelemetryProvider
             self.reader = SimulatedTelemetryProvider(scenario=self.scenario)
             cprint(f"[Agent] Telemetry Mode: SIMULATED (Scenario: {self.scenario.upper()})", GREEN)
+            from isolation_provider import SimulatedIsolationProvider
+            self.isolation_provider = SimulatedIsolationProvider(telemetry_provider=self.reader)
         else:
             from telemetry_provider import WindowsTelemetryProvider
             self.reader = WindowsTelemetryProvider()
             cprint("[Agent] Telemetry Mode: REAL (Windows Event Logs)", GREEN)
+            from isolation_provider import WindowsSafeDemoIsolationProvider
+            self.isolation_provider = WindowsSafeDemoIsolationProvider()
 
         self.buffer   = SlidingWindowBuffer(window_size_seconds=WINDOW_SIZE_SECONDS)
         self.extractor = FeatureExtractor()
@@ -576,7 +580,19 @@ class Agent:
             # Successful heartbeat: reset backoff
             self._heartbeat_backoff_delay = 15.0
             self._heartbeat_backoff_until = 0.0
-            cprint(f"  [Heartbeat] Stats sent. Status: {response.json().get('status')}", GREEN)
+
+            res_json = response.json()
+            status = res_json.get("status")
+            pending_actions = res_json.get("pendingActions", [])
+
+            if self.isolation_provider.is_isolated:
+                cprint(f"  [Heartbeat] Stats sent. Status: {status} (ENDPOINT ISOLATED)", YELLOW)
+            else:
+                cprint(f"  [Heartbeat] Stats sent. Status: {status}", GREEN)
+
+            if pending_actions:
+                self._process_pending_actions(pending_actions)
+
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 429:
                 delay = self._heartbeat_backoff_delay
@@ -588,9 +604,63 @@ class Agent:
         except Exception as e:
             cprint(f"  [Heartbeat] Failed to send: {e}", YELLOW)
 
+    def _acknowledge_action(self, action_id: str, status: str = "ACKNOWLEDGED", error_msg: Optional[str] = None):
+        """Sends an acknowledgment to the backend that an action was received and executed."""
+        if not cfg.ENDPOINT_ID:
+            return
+        try:
+            import requests
+            url = f"{cfg.BACKEND_API_URL}/api/endpoints/{cfg.ENDPOINT_ID}/actions/{action_id}/ack"
+            headers = {"x-api-key": cfg.BACKEND_API_KEY}
+            payload = {"status": status}
+            if error_msg:
+                payload["errorMessage"] = error_msg
+            requests.post(url, json=payload, headers=headers, timeout=5)
+        except Exception as e:
+            cprint(f"  [Action] Failed to send acknowledgment: {e}", YELLOW)
+
+    def _process_pending_actions(self, pending_actions: list):
+        """Processes incoming response/isolation actions directed strictly to this endpoint."""
+        for action in pending_actions:
+            action_id = action.get("actionId")
+            endpoint_id = action.get("endpointId")
+            action_type = action.get("actionType")
+            reason = action.get("reason", "")
+
+            # CRITICAL: Command must strictly match this agent's endpoint ID
+            if endpoint_id != cfg.ENDPOINT_ID:
+                continue
+
+            if action_type == "ISOLATE":
+                if not self.isolation_provider.is_isolated:
+                    cprint(f"\n{'='*60}", YELLOW, bold=True)
+                    cprint(f"  [ISOLATE] ISOLATION COMMAND RECEIVED FOR THIS ENDPOINT ({cfg.ENDPOINT_ID})", YELLOW, bold=True)
+                    cprint(f"  Reason: {reason}", YELLOW)
+                    cprint(f"{'='*60}", YELLOW, bold=True)
+                    result = self.isolation_provider.isolate(reason=reason)
+                    cprint(f"  [Isolation] {result['message']}", GREEN)
+                    self._acknowledge_action(action_id, status="ACKNOWLEDGED")
+                else:
+                    self._acknowledge_action(action_id, status="ACKNOWLEDGED")
+
+            elif action_type == "UNISOLATE":
+                if self.isolation_provider.is_isolated:
+                    cprint(f"\n{'='*60}", GREEN, bold=True)
+                    cprint(f"  [UNISOLATE] UNISOLATE COMMAND RECEIVED FOR THIS ENDPOINT ({cfg.ENDPOINT_ID})", GREEN, bold=True)
+                    cprint(f"{'='*60}", GREEN, bold=True)
+                    result = self.isolation_provider.release()
+                    cprint(f"  [Isolation] {result['message']}", GREEN)
+                    self._acknowledge_action(action_id, status="ACKNOWLEDGED")
+                else:
+                    self._acknowledge_action(action_id, status="ACKNOWLEDGED")
+
     def _report_ransomware_alert(self, pid: int, process_name: str, score: float) -> bool:
         """Sends a critical ransomware detection alert to the backend."""
         if not cfg.ENDPOINT_ID or not cfg.AUTO_REPORT_DETECTIONS:
+            return False
+
+        if self.isolation_provider.is_isolated:
+            cprint("  [Detection] Endpoint is currently ISOLATED. Alert reporting suppressed.", YELLOW)
             return False
 
         try:

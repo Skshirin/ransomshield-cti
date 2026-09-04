@@ -3,3 +3,4 @@ export * from "./user";
 export * from "./endpoint";
 export * from "./detection";
 export * from "./cti";
+export * from "./timeline";
