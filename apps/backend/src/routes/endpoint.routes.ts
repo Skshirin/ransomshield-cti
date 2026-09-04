@@ -11,7 +11,12 @@ import {
   deleteEndpoint,
   activate,
   heartbeat,
+  isolate,
+  unisolate,
+  listActions,
+  ackAction,
 } from "../controllers/endpoint.controller";
+import { getEndpointTimelineHandler } from "../controllers/timeline.controller";
 
 const router = Router();
 
@@ -23,10 +28,29 @@ router.post("/activate", asyncHandler(activate));
 // Heartbeat route for machine-to-machine check-ins from the agent
 router.post("/:id/heartbeat", requireServiceApiKey, heartbeatLimiter, asyncHandler(heartbeat));
 
+// Action acknowledgment for machine-to-machine response reporting
+router.post("/:id/actions/:actionId/ack", requireServiceApiKey, asyncHandler(ackAction));
+
 router.use(requireAuth);
 
 router.get("/", asyncHandler(getEndpoints));
 router.get("/:id", asyncHandler(getEndpoint));
+router.get("/:id/timeline", asyncHandler(getEndpointTimelineHandler));
+router.get("/:id/actions", asyncHandler(listActions));
+
+router.post(
+  "/:id/isolate",
+  requireRole("ORG_ADMIN", "SECURITY_ANALYST"),
+  auditLog("ENDPOINT_ISOLATED"),
+  asyncHandler(isolate)
+);
+
+router.post(
+  "/:id/unisolate",
+  requireRole("ORG_ADMIN", "SECURITY_ANALYST"),
+  auditLog("ENDPOINT_UNISOLATED"),
+  asyncHandler(unisolate)
+);
 
 router.post(
   "/",

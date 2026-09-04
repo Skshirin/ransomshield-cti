@@ -7,10 +7,13 @@ import {
   removeEndpoint,
   activateEndpoint,
   heartbeatEndpoint,
+  isolateEndpoint,
+  unisolateEndpoint,
+  getEndpointActions,
+  acknowledgeAction,
 } from "../services/endpoint.service";
 import { AppError } from "../middleware/error.middleware";
 import { Request } from "express";
-
 
 export async function addEndpoint(req: AuthenticatedRequest, res: Response) {
   const { name } = req.body;
@@ -73,10 +76,62 @@ export async function activate(req: Request, res: Response) {
   });
 }
 
+export async function isolate(req: AuthenticatedRequest, res: Response) {
+  const organizationId = req.user!.organizationId;
+  const userId = req.user?.userId;
+  const { reason } = req.body;
+
+  const result = await isolateEndpoint(organizationId, req.params.id, userId, reason);
+
+  res.status(200).json({
+    message: "Endpoint isolated successfully",
+    endpoint: result.endpoint,
+    action: result.action,
+  });
+}
+
+export async function unisolate(req: AuthenticatedRequest, res: Response) {
+  const organizationId = req.user!.organizationId;
+  const userId = req.user?.userId;
+
+  const result = await unisolateEndpoint(organizationId, req.params.id, userId);
+
+  res.status(200).json({
+    message: "Endpoint isolation released successfully",
+    endpoint: result.endpoint,
+    action: result.action,
+  });
+}
+
+export async function listActions(req: AuthenticatedRequest, res: Response) {
+  const organizationId = req.user!.organizationId;
+  const actions = await getEndpointActions(organizationId, req.params.id);
+  res.status(200).json({ actions });
+}
+
+export async function ackAction(req: Request, res: Response) {
+  const { status, errorMessage } = req.body;
+  if (!status || !["ACKNOWLEDGED", "COMPLETED", "FAILED"].includes(status)) {
+    throw new AppError("Valid action status is required (ACKNOWLEDGED, COMPLETED, or FAILED)", 400);
+  }
+
+  const action = await acknowledgeAction(
+    req.params.id,
+    req.params.actionId,
+    status,
+    errorMessage
+  );
+
+  res.status(200).json({
+    message: "Action acknowledgment recorded",
+    action,
+  });
+}
+
 export async function heartbeat(req: Request, res: Response) {
   const { cpuUsagePercent, ramUsagePercent, diskUsagePercent } = req.body;
   
-  const endpoint = await heartbeatEndpoint(req.params.id, {
+  const { endpoint, pendingActions } = await heartbeatEndpoint(req.params.id, {
     cpuUsagePercent,
     ramUsagePercent,
     diskUsagePercent,
@@ -86,5 +141,13 @@ export async function heartbeat(req: Request, res: Response) {
     message: "Heartbeat check-in successful",
     status: endpoint.status,
     lastCheckInAt: endpoint.lastCheckInAt,
+    pendingActions: (pendingActions || []).map((a) => ({
+      actionId: a._id.toString(),
+      endpointId: a.endpointId.toString(),
+      actionType: a.actionType,
+      reason: a.reason,
+      status: a.status,
+      requestedAt: a.requestedAt,
+    })),
   });
 }
