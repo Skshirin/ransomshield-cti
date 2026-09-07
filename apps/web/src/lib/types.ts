@@ -22,6 +22,8 @@ export type TimelineEventType =
   | 'UNISOLATION_FAILED'
   | 'ENDPOINT_STATUS_CHANGED'
   | 'POLICY_TRIGGERED'
+  | 'CTI_MATCHED'
+  | 'CASCADE_DETECTED'
   | 'HEARTBEAT_STATUS_CHANGED'
 
 export type TimelineActorType =
@@ -81,6 +83,35 @@ export interface Indicator {
   observedAt: string
 }
 
+export type IOCType = 'IP' | 'DOMAIN' | 'HASH' | 'URL'
+
+export interface ThreatIntelIOC {
+  indicator: string
+  type: IOCType
+  isMalicious: boolean
+  confidence: number
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  threatCategory: string
+  tags: string[]
+  source: string
+  firstSeen: string
+  lastSeen: string
+  description?: string
+}
+
+export interface CTIMatchResult {
+  matched: boolean
+  indicator?: string
+  type?: IOCType
+  isMalicious?: boolean
+  confidence?: number
+  severity?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  threatCategory?: string
+  tags?: string[]
+  source?: string
+  matchedAt?: string
+}
+
 export interface Detection {
   _id: string
   endpointName: string
@@ -92,6 +123,96 @@ export interface Detection {
   detectedAt: string
   resolvedAt?: string
   resolvedByUserId?: string
+  ctiMatch?: CTIMatchResult
+  cascadeId?: string
+}
+
+export type PolicyConditionField =
+  | 'riskScore'
+  | 'severity'
+  | 'detectionType'
+  | 'consecutiveDetections'
+  | 'ctiMatch'
+  | 'ctiConfidence'
+  | 'maliciousIocMatch'
+  | 'affectedEndpointCount'
+  | 'crossEndpointAttack'
+  | 'endpointStatus'
+
+export type PolicyConditionOperator =
+  | 'EQUALS'
+  | 'NOT_EQUALS'
+  | 'GREATER_THAN'
+  | 'GREATER_THAN_OR_EQUAL'
+  | 'LESS_THAN'
+  | 'LESS_THAN_OR_EQUAL'
+  | 'IN'
+  | 'CONTAINS'
+
+export interface PolicyCondition {
+  field: PolicyConditionField
+  operator: PolicyConditionOperator
+  value: any
+}
+
+export type PolicyActionType =
+  | 'ISOLATE_ENDPOINT'
+  | 'CREATE_ALERT'
+  | 'MARK_HIGH_RISK'
+
+export interface PolicyAction {
+  type: PolicyActionType
+  params?: Record<string, any>
+}
+
+export interface Policy {
+  _id: string
+  organizationId: string
+  name: string
+  description?: string
+  enabled: boolean
+  priority: number
+  logicalOperator: 'AND' | 'OR'
+  conditions: PolicyCondition[]
+  actions: PolicyAction[]
+  cooldownPeriodSeconds: number
+  lastTriggeredAt?: string | null
+  triggerCount: number
+  createdByUserId?: string
+  updatedByUserId?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type CascadeAttackType =
+  | 'RANSOMWARE_PROPAGATION'
+  | 'COORDINATED_C2_BURST'
+  | 'LATERAL_MOVEMENT'
+  | 'MULTI_HOST_ANOMALY'
+
+export type CascadeSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+export type CascadeStatus = 'ACTIVE' | 'CONTAINED' | 'RESOLVED'
+
+export interface Cascade {
+  _id: string
+  organizationId: string
+  cascadeId: string
+  title: string
+  attackType: CascadeAttackType
+  severity: CascadeSeverity
+  confidence: number
+  status: CascadeStatus
+  affectedEndpointIds: string[]
+  affectedEndpointNames: string[]
+  relatedDetectionIds: string[]
+  matchedIOCs: string[]
+  correlationReason: string
+  firstSeen: string
+  lastSeen: string
+  containedAt?: string | null
+  resolvedAt?: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface CTIReport {
@@ -152,5 +273,5 @@ export interface Invitation {
 export interface Toast {
   id: string
   message: string
-  type: 'success' | 'error' | 'info'
+  type: 'success' | 'error' | 'info' | 'warning'
 }

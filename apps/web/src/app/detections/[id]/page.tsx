@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, Clock, Globe, CheckCircle2, XCircle, Loader2, AlertCircle } from 'lucide-react'
+import { ChevronLeft, Clock, Globe, CheckCircle2, XCircle, Loader2, AlertCircle, Database, Radio, ShieldCheck } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { SeverityBadge, DetectionStatusBadge, Button, ConfirmModal, Card } from '@/components/ui'
 import { ResponseTimeline } from '@/components/ResponseTimeline'
@@ -168,6 +168,84 @@ export default function DetectionDetailPage({ params }: { params: Promise<{ id: 
           <p className="text-xs text-slate-500 mt-1">Risk Score</p>
         </div>
       </div>
+
+      {/* CTI Threat Intelligence Correlation */}
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-navy-900 flex items-center gap-2">
+            <Database size={16} className="text-navy-700" />
+            Threat Intelligence (CTI) Correlation
+          </h3>
+          {detection.ctiMatch?.matched ? (
+            <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700 border border-red-200">
+              MATCH FOUND ({detection.ctiMatch.confidence}% Confidence)
+            </span>
+          ) : (
+            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+              <ShieldCheck size={14} /> Clean / No Threat Match
+            </span>
+          )}
+        </div>
+
+        {detection.ctiMatch?.matched ? (
+          <div className="space-y-3 bg-red-50/50 p-4 rounded-xl border border-red-100">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div>
+                <span className="text-slate-400 font-medium block">Indicator</span>
+                <span className="font-mono font-bold text-slate-900">{detection.ctiMatch.indicator}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 font-medium block">Type</span>
+                <span className="font-mono font-bold text-slate-900">{detection.ctiMatch.type}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 font-medium block">Threat Category</span>
+                <span className="font-bold text-red-700">{detection.ctiMatch.threatCategory || 'Ransomware'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 font-medium block">Source Feed</span>
+                <span className="font-medium text-slate-700">{detection.ctiMatch.source || 'SentinelIQ Local CTI'}</span>
+              </div>
+            </div>
+            {detection.ctiMatch.tags && detection.ctiMatch.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {detection.ctiMatch.tags.map((t, idx) => (
+                  <span key={idx} className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-100 text-red-800">
+                    #{t}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">
+            Automated indicator extraction queried active Threat Intelligence feeds. No known malicious signatures or IOCs were matched.
+          </p>
+        )}
+      </Card>
+
+      {/* Cross-Endpoint Cascade Correlation */}
+      {detection.cascadeId && (
+        <Card className="p-5 border-purple-200 bg-purple-50/30">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-purple-900 flex items-center gap-2">
+              <Radio size={16} className="text-purple-700" />
+              Cross-Endpoint Attack / Cascade Correlated
+            </h3>
+            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-800">
+              ID: {detection.cascadeId}
+            </span>
+          </div>
+          <p className="text-xs text-purple-800">
+            This detection is part of an active multi-endpoint attack cascade. Review coordinated lateral activity in the Attack Cascades center.
+          </p>
+          <div className="mt-3">
+            <Button variant="secondary" size="sm" onClick={() => router.push('/cascades')}>
+              View Cascade Center
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* Indicators */}
       <Card>

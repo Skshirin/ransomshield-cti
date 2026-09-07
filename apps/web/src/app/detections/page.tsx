@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Layout from '@/components/Layout'
-import { Download, Search, ChevronDown, Monitor, X, CheckCircle2, FileText, Activity, Database, ShieldCheck } from 'lucide-react'
+import { Download, Search, ChevronDown, Monitor, X, CheckCircle2, FileText, Activity, Database, ShieldCheck, Radio } from 'lucide-react'
 import {
   P, STORM, BG, TEXT, MUTED, BORDER, RED, AMBER, GREEN,
   StatusBadge, ScoreBadge,
@@ -165,9 +165,25 @@ function DetectionsContent() {
                       {timeStr}
                     </td>
                     <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-2">
-                        <Monitor className="w-3.5 h-3.5 flex-shrink-0" style={{ color: MUTED }} />
-                        <span className="text-[13px] font-medium" style={{ color: TEXT }}>{d.endpointName || "Unknown Endpoint"}</span>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <Monitor className="w-3.5 h-3.5 flex-shrink-0" style={{ color: MUTED }} />
+                          <span className="text-[13px] font-medium" style={{ color: TEXT }}>{d.endpointName || "Unknown Endpoint"}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {d.ctiMatch?.matched && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-800 border border-red-200">
+                              <Database className="w-2.5 h-2.5" />
+                              CTI Match ({d.ctiMatch.confidence}%)
+                            </span>
+                          )}
+                          {d.cascadeId && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
+                              <Radio className="w-2.5 h-2.5" />
+                              Cascade Active
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-5 py-3.5"><ScoreBadge score={d.riskScore ?? 0} /></td>
@@ -244,6 +260,65 @@ function DetectionsContent() {
                   Risk score calculated by XGBoost feature extraction engine: {selected.riskScore}/100.
                 </div>
               </div>
+
+              {/* Threat Intelligence (CTI) Correlation Card */}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Threat Intelligence (CTI)</p>
+                {selected.ctiMatch?.matched ? (
+                  <div className="p-3.5 rounded-xl border border-red-200 bg-red-50/70 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-red-900 flex items-center gap-1.5">
+                        <Database className="w-3.5 h-3.5 text-red-600" />
+                        MALICIOUS IOC MATCH FOUND
+                      </span>
+                      <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-red-200 text-red-900">
+                        {selected.ctiMatch.confidence}% Confidence
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs bg-white p-2.5 rounded-lg border border-red-100 font-mono">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase">Indicator</span>
+                        <span className="text-slate-900 font-bold truncate block">{selected.ctiMatch.indicator}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase">Threat Category</span>
+                        <span className="text-red-700 font-bold">{selected.ctiMatch.threatCategory || 'Ransomware'}</span>
+                      </div>
+                    </div>
+                    {selected.ctiMatch.tags && selected.ctiMatch.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        {selected.ctiMatch.tags.map((t, idx) => (
+                          <span key={idx} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-100 text-red-800">
+                            #{t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-lg border flex items-center justify-between text-xs text-slate-600" style={{ borderColor: BORDER, backgroundColor: BG }}>
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>No malicious CTI match (Indicators clean or unlisted)</span>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">CLEAN</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Cascade Correlation Card if present */}
+              {selected.cascadeId && (
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Cross-Endpoint Attack Correlation</p>
+                  <div className="p-3.5 rounded-xl border border-purple-200 bg-purple-50/70 flex items-start gap-3">
+                    <Radio className="w-4 h-4 text-purple-700 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-purple-900">Member of Multi-Endpoint Cascade</p>
+                      <p className="text-[11px] text-purple-700 font-mono mt-0.5">Cascade ID: {selected.cascadeId}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Status details */}
               <div>

@@ -14,6 +14,9 @@ import {
   Search,
   Bell,
   LogOut,
+  SlidersHorizontal,
+  Radio,
+  Database,
 } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { P, STORM, BG, TEXT, MUTED, BORDER, RED } from './ui'
@@ -22,7 +25,10 @@ const NAV = [
   { id: 'dashboard', label: 'Dashboard', path: '/dashboard', Icon: LayoutDashboard },
   { id: 'endpoints', label: 'Endpoints', path: '/endpoints', Icon: Monitor },
   { id: 'detections', label: 'Detections', path: '/detections', Icon: AlertTriangle },
-  { id: 'cti-center', label: 'CTI Center', path: '/cti-center', Icon: FileText },
+  { id: 'cascades', label: 'Attack Cascades', path: '/cascades', Icon: Radio },
+  { id: 'policies', label: 'Response Policies', path: '/policies', Icon: SlidersHorizontal },
+  { id: 'threat-intel', label: 'Threat Intel (CTI)', path: '/threat-intel', Icon: Database },
+  { id: 'cti-center', label: 'CTI Reports', path: '/cti-center', Icon: FileText },
   { id: 'cti-feed', label: 'CTI Feed', path: '/cti-feed', Icon: Globe },
 ]
 

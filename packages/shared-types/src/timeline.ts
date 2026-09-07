@@ -15,6 +15,8 @@ export type TimelineEventType =
   | "UNISOLATION_FAILED"
   | "ENDPOINT_STATUS_CHANGED"
   | "POLICY_TRIGGERED"
+  | "CTI_MATCHED"
+  | "CASCADE_DETECTED"
   | "HEARTBEAT_STATUS_CHANGED";
 
 export type TimelineActorType =

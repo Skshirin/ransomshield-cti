@@ -4,3 +4,5 @@ export * from "./endpoint";
 export * from "./detection";
 export * from "./cti";
 export * from "./timeline";
+export * from "./policy";
+export * from "./cascade";

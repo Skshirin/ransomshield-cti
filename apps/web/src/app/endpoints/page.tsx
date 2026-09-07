@@ -12,7 +12,7 @@ import { useApp } from '@/lib/context'
 import type { Endpoint } from '@/lib/types'
 
 function EndpointsContent() {
-  const { endpoints, addEndpoint, removeEndpoint, isolateEndpoint, unisolateEndpoint, resolveDetection, detections, showToast } = useApp()
+  const { endpoints, addEndpoint, removeEndpoint, isolateEndpoint, unisolateEndpoint, resolveDetection, detections, cascades, policies, showToast } = useApp()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [isolateConfirmOpen, setIsolateConfirmOpen] = useState(false)
@@ -179,6 +179,8 @@ function EndpointsContent() {
                   ep.status === 'AT_RISK' ? 'At Risk' :
                   ep.status === 'ISOLATED' ? 'Isolated' : 'Offline'
 
+                const activeCascadeForEp = cascades.find(c => c.status === 'ACTIVE' && (c.affectedEndpointIds.includes(ep._id) || c.affectedEndpointNames.includes(ep.name)))
+
                 return (
                   <tr
                     key={ep._id}
@@ -187,9 +189,18 @@ function EndpointsContent() {
                     style={{ borderColor: BORDER }}
                   >
                     <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-2">
-                        <Monitor className="w-3.5 h-3.5 flex-shrink-0" style={{ color: MUTED }} />
-                        <span className="text-[13px] font-semibold" style={{ color: TEXT }}>{ep.name}</span>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <Monitor className="w-3.5 h-3.5 flex-shrink-0" style={{ color: MUTED }} />
+                          <span className="text-[13px] font-semibold" style={{ color: TEXT }}>{ep.name}</span>
+                        </div>
+                        {activeCascadeForEp && (
+                          <div className="flex">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
+                              Cascade: {activeCascadeForEp.cascadeId}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-5 py-3.5"><StatusBadge status={displayStatus} /></td>
@@ -247,6 +258,19 @@ function EndpointsContent() {
                     <p className="text-[13px] font-bold text-purple-900">Endpoint Isolated</p>
                     <p className="text-[12px] text-purple-700 mt-0.5 leading-relaxed">
                       This host is logically isolated from the network. Response actions are enforced.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Cascade Membership Banner */}
+              {cascades.find(c => c.status === 'ACTIVE' && (c.affectedEndpointIds.includes(selected._id) || c.affectedEndpointNames.includes(selected.name))) && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-start gap-3">
+                  <ShieldAlert className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[13px] font-bold text-red-900">Active Cascade Target</p>
+                    <p className="text-[12px] text-red-700 mt-0.5 leading-relaxed">
+                      This host is currently targeted in a correlated multi-host attack cascade.
                     </p>
                   </div>
                 </div>

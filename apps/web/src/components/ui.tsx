@@ -549,6 +549,7 @@ const toastStyles = {
   success: { icon: CheckCircle2, bar: 'bg-emerald-500', bg: 'bg-white', text: 'text-emerald-700' },
   error: { icon: AlertCircle, bar: 'bg-red-500', bg: 'bg-white', text: 'text-red-700' },
   info: { icon: Info, bar: 'bg-blue-500', bg: 'bg-white', text: 'text-blue-700' },
+  warning: { icon: AlertCircle, bar: 'bg-amber-500', bg: 'bg-white', text: 'text-amber-700' },
 }
 
 export function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {

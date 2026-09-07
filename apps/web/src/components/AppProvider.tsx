@@ -4,7 +4,22 @@ import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { AppContext } from '@/lib/context'
 import type { AppContextType } from '@/lib/context'
-import type { CurrentUser, Endpoint, Detection, CTIReport, TeamUser, AuditLog, Invitation, Toast, UserRole, TimelineEvent } from '@/lib/types'
+import type {
+  CurrentUser,
+  Endpoint,
+  Detection,
+  CTIReport,
+  TeamUser,
+  AuditLog,
+  Invitation,
+  Toast,
+  UserRole,
+  TimelineEvent,
+  Policy,
+  Cascade,
+  ThreatIntelIOC,
+  CTIMatchResult,
+} from '@/lib/types'
 import {
   apiGet,
   apiPost,
@@ -18,14 +33,6 @@ import {
 } from '@/lib/api'
 import { initSocket, disconnectSocket, getSocket } from '@/lib/socket'
 import { ToastItem } from '@/components/ui'
-import {
-  mockEndpoints,
-  mockDetections,
-  mockCTIReports,
-  mockTeamUsers,
-  mockAuditLogs,
-  mockGlobalCTIFeed,
-} from '@/lib/mockData'
 
 interface ListState<T> {
   data: T[]
@@ -57,6 +64,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [invitationState, setInvitationState] = useState<ListState<Invitation>>(initList([]))
   const [auditState, setAuditState] = useState<ListState<AuditLog>>(initList([]))
   const [feedState, setFeedState] = useState<ListState<CTIReport>>(initList([]))
+  const [policyState, setPolicyState] = useState<ListState<Policy>>(initList([]))
+  const [cascadeState, setCascadeState] = useState<ListState<Cascade>>(initList([]))
+  const [threatIntelState, setThreatIntelState] = useState<ListState<ThreatIntelIOC>>(initList([]))
 
   const currentUserRef = useRef<CurrentUser | null>(null)
   currentUserRef.current = currentUser
@@ -152,6 +162,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const fetchPolicies = useCallback(async () => {
+    setPolicyState(s => ({ ...s, loading: true, error: null }))
+    try {
+      const data = await apiGet<{ policies: Policy[] }>('/policies')
+      setPolicyState({ data: data.policies || [], loading: false, error: null })
+    } catch {
+      setPolicyState(s => ({ ...s, loading: false }))
+    }
+  }, [])
+
+  const fetchCascades = useCallback(async () => {
+    setCascadeState(s => ({ ...s, loading: true, error: null }))
+    try {
+      const data = await apiGet<{ cascades: Cascade[] }>('/cascades')
+      setCascadeState({ data: data.cascades || [], loading: false, error: null })
+    } catch {
+      setCascadeState(s => ({ ...s, loading: false }))
+    }
+  }, [])
+
+  const fetchThreatIntel = useCallback(async () => {
+    setThreatIntelState(s => ({ ...s, loading: true, error: null }))
+    try {
+      const data = await apiGet<{ iocs: ThreatIntelIOC[] }>('/threat-intel/iocs')
+      setThreatIntelState({ data: data.iocs || [], loading: false, error: null })
+    } catch {
+      setThreatIntelState(s => ({ ...s, loading: false }))
+    }
+  }, [])
+
   const fetchEndpointTimeline = useCallback(async (endpointId: string) => {
     try {
       const data = await apiGet<{ events: TimelineEvent[] }>(`/endpoints/${endpointId}/timeline`)
@@ -200,6 +240,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     socket.off('endpoint:updated')
     socket.off('endpoint:heartbeat')
     socket.off('endpoint:removed')
+    socket.off('policy:triggered')
+    socket.off('cascade:created')
+    socket.off('cascade:updated')
+    socket.off('cti:match')
 
     socket.on('endpoint:new', (endpoint: Endpoint) => {
       setEndpointState(s => {
@@ -263,17 +307,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }))
       showToast('CTI Report published to blockchain and verified', 'success')
     })
-  }, [showToast, fetchEndpoints])
 
-  // Periodic polling for live heartbeat/detection sync
+    socket.on('policy:triggered', (data: { policyId: string; policyName: string; action: string; endpointId?: string; endpointName?: string }) => {
+      fetchPolicies()
+      fetchEndpoints()
+      showToast(
+        `Automated Policy [${data.policyName}] triggered action ${data.action} on ${data.endpointName || data.endpointId || 'system'}`,
+        'error',
+      )
+    })
+
+    socket.on('cascade:created', (cascade: Cascade) => {
+      setCascadeState(s => {
+        if (s.data.some(c => c._id === cascade._id)) return s
+        return { ...s, data: [cascade, ...s.data] }
+      })
+      showToast(
+        `Cross-Endpoint Attack Detected: ${cascade.title} (${cascade.affectedEndpointIds.length} endpoints affected)`,
+        'error',
+      )
+    })
+
+    socket.on('cascade:updated', (cascade: Cascade) => {
+      setCascadeState(s => ({
+        ...s,
+        data: s.data.map(c => (c._id === cascade._id ? cascade : c)),
+      }))
+    })
+
+    socket.on('cti:match', (match: CTIMatchResult) => {
+      showToast(
+        `CTI Threat Match: ${match.indicator} (${match.threatCategory || match.type}) [${match.confidence}% confidence]`,
+        'warning',
+      )
+    })
+  }, [showToast, fetchEndpoints, fetchPolicies])
+
+  // Periodic polling for live heartbeat/detection/cascade sync
   useEffect(() => {
     if (!currentUser) return
     const interval = setInterval(() => {
       fetchEndpoints()
       fetchDetections()
+      fetchCascades()
     }, 8000)
     return () => clearInterval(interval)
-  }, [currentUser, fetchEndpoints, fetchDetections])
+  }, [currentUser, fetchEndpoints, fetchDetections, fetchCascades])
 
   // Session Restoration Effect
   useEffect(() => {
@@ -292,6 +371,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           fetchDetections(),
           fetchCTI(),
           fetchTeam(),
+          fetchPolicies(),
+          fetchCascades(),
+          fetchThreatIntel(),
           ...(user.role === 'ORG_ADMIN' ? [fetchAuditLogs(), fetchInvitations()] : []),
         ]).catch(() => {})
       } else {
@@ -302,7 +384,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCurrentUser(null)
       setIsInitializing(false)
     })
-  }, [fetchEndpoints, fetchDetections, fetchCTI, fetchTeam, fetchAuditLogs, fetchInvitations, setupSocketListeners])
+  }, [fetchEndpoints, fetchDetections, fetchCTI, fetchTeam, fetchPolicies, fetchCascades, fetchThreatIntel, fetchAuditLogs, fetchInvitations, setupSocketListeners])
 
   // Route Protection Effect
   useEffect(() => {
@@ -328,11 +410,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       fetchDetections(),
       fetchCTI(),
       fetchTeam(),
+      fetchPolicies(),
+      fetchCascades(),
+      fetchThreatIntel(),
       ...(data.user.role === 'ORG_ADMIN' ? [fetchAuditLogs(), fetchInvitations()] : []),
     ]).catch(() => {})
 
     showToast(`Welcome back, ${data.user.name.split(' ')[0]}!`, 'success')
-  }, [router, fetchEndpoints, fetchDetections, fetchCTI, fetchTeam, fetchAuditLogs, fetchInvitations, showToast, setupSocketListeners])
+  }, [router, fetchEndpoints, fetchDetections, fetchCTI, fetchTeam, fetchPolicies, fetchCascades, fetchThreatIntel, fetchAuditLogs, fetchInvitations, showToast, setupSocketListeners])
 
   const logout = useCallback(async () => {
     try {
@@ -346,6 +431,109 @@ export function AppProvider({ children }: { children: ReactNode }) {
     router.push('/login')
     showToast('Logged out successfully', 'info')
   }, [router, showToast])
+
+  // ─── Policy Mutations ────────────────────────────────────────────────────────
+
+  const createPolicy = useCallback(async (data: Partial<Policy>): Promise<Policy> => {
+    try {
+      const res = await apiPost<{ policy: Policy }>('/policies', data)
+      setPolicyState(s => ({ ...s, data: [res.policy, ...s.data] }))
+      showToast(`Policy "${res.policy.name}" created successfully`, 'success')
+      return res.policy
+    } catch (err: any) {
+      showToast(err.message || 'Failed to create policy', 'error')
+      throw err
+    }
+  }, [showToast])
+
+  const updatePolicy = useCallback(async (id: string, data: Partial<Policy>): Promise<Policy> => {
+    try {
+      const res = await apiPatch<{ policy: Policy }>(`/policies/${id}`, data)
+      setPolicyState(s => ({
+        ...s,
+        data: s.data.map(p => (p._id === id ? res.policy : p)),
+      }))
+      showToast(`Policy "${res.policy.name}" updated`, 'success')
+      return res.policy
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update policy', 'error')
+      throw err
+    }
+  }, [showToast])
+
+  const togglePolicy = useCallback(async (id: string, enabled?: boolean): Promise<Policy> => {
+    try {
+      const res = await apiPatch<{ policy: Policy }>(`/policies/${id}/toggle`, { enabled })
+      setPolicyState(s => ({
+        ...s,
+        data: s.data.map(p => (p._id === id ? res.policy : p)),
+      }))
+      showToast(`Policy "${res.policy.name}" ${res.policy.enabled ? 'enabled' : 'disabled'}`, 'success')
+      return res.policy
+    } catch (err: any) {
+      showToast(err.message || 'Failed to toggle policy', 'error')
+      throw err
+    }
+  }, [showToast])
+
+  const deletePolicy = useCallback(async (id: string): Promise<void> => {
+    try {
+      await apiDelete(`/policies/${id}`)
+      setPolicyState(s => ({
+        ...s,
+        data: s.data.filter(p => p._id !== id),
+      }))
+      showToast('Policy deleted', 'success')
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete policy', 'error')
+      throw err
+    }
+  }, [showToast])
+
+  // ─── Cascade Mutations ───────────────────────────────────────────────────────
+
+  const containCascade = useCallback(async (id: string) => {
+    try {
+      const res = await apiPost<{ cascade: Cascade; isolatedEndpoints: string[] }>(`/cascades/${id}/contain`)
+      setCascadeState(s => ({
+        ...s,
+        data: s.data.map(c => (c._id === id ? res.cascade : c)),
+      }))
+      await fetchEndpoints()
+      showToast(`Cascade contained! Isolated ${res.isolatedEndpoints.length} affected endpoints`, 'success')
+      return res
+    } catch (err: any) {
+      showToast(err.message || 'Failed to contain cascade', 'error')
+      throw err
+    }
+  }, [showToast, fetchEndpoints])
+
+  const resolveCascade = useCallback(async (id: string): Promise<Cascade> => {
+    try {
+      const res = await apiPost<{ cascade: Cascade }>(`/cascades/${id}/resolve`)
+      setCascadeState(s => ({
+        ...s,
+        data: s.data.map(c => (c._id === id ? res.cascade : c)),
+      }))
+      showToast('Cascade marked as resolved', 'success')
+      return res.cascade
+    } catch (err: any) {
+      showToast(err.message || 'Failed to resolve cascade', 'error')
+      throw err
+    }
+  }, [showToast])
+
+  // ─── Threat Intel Lookup ────────────────────────────────────────────────────
+
+  const lookupIOC = useCallback(async (indicator: string, type?: string): Promise<CTIMatchResult> => {
+    try {
+      const res = await apiPost<{ match: CTIMatchResult }>('/threat-intel/lookup', { indicator, type })
+      return res.match
+    } catch (err: any) {
+      showToast(err.message || 'CTI lookup failed', 'error')
+      throw err
+    }
+  }, [showToast])
 
   // ─── Mutations ────────────────────────────────────────────────────────────────
 
@@ -626,6 +814,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
     globalFeed: feedState.data,
     feedLoading: feedState.loading,
     feedError: feedState.error,
+
+    // Policies
+    policies: policyState.data,
+    policiesLoading: policyState.loading,
+    policiesError: policyState.error,
+    refetchPolicies: fetchPolicies,
+    createPolicy,
+    updatePolicy,
+    togglePolicy,
+    deletePolicy,
+
+    // Cascades
+    cascades: cascadeState.data,
+    cascadesLoading: cascadeState.loading,
+    cascadesError: cascadeState.error,
+    refetchCascades: fetchCascades,
+    containCascade,
+    resolveCascade,
+
+    // Threat Intel
+    threatIntelIocs: threatIntelState.data,
+    threatIntelLoading: threatIntelState.loading,
+    refetchThreatIntel: fetchThreatIntel,
+    lookupIOC,
 
     fetchEndpointTimeline,
     fetchDetectionTimeline,

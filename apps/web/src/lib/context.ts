@@ -1,5 +1,20 @@
 import { createContext, useContext } from 'react'
-import type { CurrentUser, Endpoint, Detection, CTIReport, TeamUser, AuditLog, Invitation, Toast, UserRole, TimelineEvent } from './types'
+import type {
+  CurrentUser,
+  Endpoint,
+  Detection,
+  CTIReport,
+  TeamUser,
+  AuditLog,
+  Invitation,
+  Toast,
+  UserRole,
+  TimelineEvent,
+  Policy,
+  Cascade,
+  ThreatIntelIOC,
+  CTIMatchResult,
+} from './types'
 
 export interface AppContextType {
   // Auth
@@ -51,6 +66,30 @@ export interface AppContextType {
   globalFeed: CTIReport[]
   feedLoading: boolean
   feedError: string | null
+
+  // Policies
+  policies: Policy[]
+  policiesLoading: boolean
+  policiesError: string | null
+  refetchPolicies: () => void
+  createPolicy: (data: Partial<Policy>) => Promise<Policy>
+  updatePolicy: (id: string, data: Partial<Policy>) => Promise<Policy>
+  togglePolicy: (id: string, enabled?: boolean) => Promise<Policy>
+  deletePolicy: (id: string) => Promise<void>
+
+  // Attack Cascades
+  cascades: Cascade[]
+  cascadesLoading: boolean
+  cascadesError: string | null
+  refetchCascades: () => void
+  containCascade: (id: string) => Promise<{ cascade: Cascade; isolatedEndpoints: string[] }>
+  resolveCascade: (id: string) => Promise<Cascade>
+
+  // Threat Intelligence
+  threatIntelIocs: ThreatIntelIOC[]
+  threatIntelLoading: boolean
+  refetchThreatIntel: () => void
+  lookupIOC: (indicator: string, type?: string) => Promise<CTIMatchResult>
 
   // Timeline
   fetchEndpointTimeline: (endpointId: string) => Promise<TimelineEvent[]>

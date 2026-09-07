@@ -1,8 +1,9 @@
 'use client'
 
 import { useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
-import { Globe, ShieldCheck } from 'lucide-react'
+import { Globe, ShieldCheck, Radio, SlidersHorizontal, Database, Flame, Zap, ArrowRight } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
@@ -14,7 +15,8 @@ import {
 import { useApp } from '@/lib/context'
 
 function DashboardContent() {
-  const { endpoints, detections, ctiReports, globalFeed } = useApp()
+  const router = useRouter()
+  const { endpoints, detections, ctiReports, globalFeed, policies, cascades } = useApp()
 
   // ── 1. Endpoint status metrics ───────────────────────────────────────────────
   const totalEndpoints = endpoints.length
@@ -31,6 +33,12 @@ function DashboardContent() {
   // ── 3. CTI metrics ───────────────────────────────────────────────────────────
   const ctiPublished = ctiReports.filter(r => r.status === 'PUBLISHED').length
   const ctiReceived = globalFeed.length
+  const ctiMatchCount = detections.filter(d => d.ctiMatch?.matched).length
+
+  // ── 3b. Policy & Cascade metrics ─────────────────────────────────────────────
+  const activePoliciesCount = policies.filter(p => p.enabled).length
+  const totalPolicyTriggers = policies.reduce((sum, p) => sum + (p.triggerCount || 0), 0)
+  const activeCascadesCount = cascades.filter(c => c.status === 'ACTIVE').length
 
   // ── 4. 30-day detection timeline ─────────────────────────────────────────────
   const lineData = useMemo(() => {
@@ -98,15 +106,42 @@ function DashboardContent() {
   const recentCTI = (globalFeed.length > 0 ? globalFeed : ctiReports).slice(0, 4)
 
   return (
-    <div className="p-6 flex flex-col gap-7">
-      {/* KPI row */}
-      <div className="grid grid-cols-4 gap-3">
+    <div className="p-6 flex flex-col gap-6">
+      {/* High-Priority Active Cascade Alert Banner */}
+      {activeCascadesCount > 0 && (
+        <div className="p-4 rounded-xl border border-red-200 bg-red-50/90 flex items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-red-600 flex items-center justify-center text-white flex-shrink-0">
+              <Flame className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-red-900">
+                CRITICAL: {activeCascadesCount} Active Cross-Endpoint Attack {activeCascadesCount > 1 ? 'Cascades' : 'Cascade'}
+              </p>
+              <p className="text-xs text-red-700">
+                Coordinated ransomware or lateral activity detected across multiple endpoints in your organization.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => router.push('/cascades')}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-red-600 hover:bg-red-700 cursor-pointer shadow-sm flex-shrink-0"
+          >
+            Open Attack Center
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Primary KPI row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           {
             label: "ENDPOINTS ONLINE",
             value: `${onlineCount} / ${totalEndpoints}`,
             sub: `${offlineCount} offline${isolatedCount > 0 ? `, ${isolatedCount} isolated` : ''}`,
             dot: onlineCount > 0 ? GREEN : MUTED,
+            path: '/endpoints',
           },
           {
             label: "ACTIVE DETECTIONS",
@@ -114,20 +149,28 @@ function DashboardContent() {
             sub: activeDetections > 0 ? "Requires review" : "No active threats",
             dot: RED,
             alert: activeDetections > 0,
+            path: '/detections',
           },
           {
             label: "CTI PUBLISHED",
             value: `${ctiPublished}`,
             sub: "Reports on-chain",
             accent: LAV,
+            path: '/cti-center',
           },
           {
-            label: "CTI RECEIVED",
+            label: "GLOBAL CTI FEED",
             value: `${ctiReceived}`,
             sub: "From network feed",
+            path: '/cti-feed',
           },
         ].map((c, i) => (
-          <div key={i} className="bg-white border rounded-[10px] p-5 shadow-sm" style={{ borderColor: BORDER }}>
+          <div
+            key={i}
+            onClick={() => c.path && router.push(c.path)}
+            className="bg-white border rounded-[10px] p-5 shadow-sm hover:border-slate-300 transition-colors cursor-pointer"
+            style={{ borderColor: BORDER }}
+          >
             <p className="text-[10px] font-bold tracking-[0.1em] mb-3 uppercase" style={{ color: MUTED }}>{c.label}</p>
             <div className="flex items-center gap-2">
               <span className="text-[28px] font-bold leading-none" style={{ color: "alert" in c && c.alert ? RED : TEXT }}>
@@ -151,6 +194,73 @@ function DashboardContent() {
             <p className="text-[11px] mt-1.5" style={{ color: MUTED }}>{c.sub}</p>
           </div>
         ))}
+      </div>
+
+      {/* Security Layer Engine KPI Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div
+          onClick={() => router.push('/policies')}
+          className="bg-white border rounded-[10px] p-4 shadow-sm hover:border-slate-300 transition-colors cursor-pointer flex items-center justify-between"
+          style={{ borderColor: BORDER }}
+        >
+          <div>
+            <p className="text-[10px] font-bold uppercase text-slate-500">Active Policies</p>
+            <p className="text-xl font-bold text-slate-900 mt-0.5">{activePoliciesCount}</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Automated rules</p>
+          </div>
+          <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-800 flex items-center justify-center">
+            <SlidersHorizontal className="w-4 h-4" />
+          </div>
+        </div>
+
+        <div
+          onClick={() => router.push('/policies')}
+          className="bg-white border rounded-[10px] p-4 shadow-sm hover:border-slate-300 transition-colors cursor-pointer flex items-center justify-between"
+          style={{ borderColor: BORDER }}
+        >
+          <div>
+            <p className="text-[10px] font-bold uppercase text-slate-500">Policy Triggers</p>
+            <p className="text-xl font-bold text-red-600 mt-0.5">{totalPolicyTriggers}</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Auto responses</p>
+          </div>
+          <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
+            <Zap className="w-4 h-4" />
+          </div>
+        </div>
+
+        <div
+          onClick={() => router.push('/cascades')}
+          className="bg-white border rounded-[10px] p-4 shadow-sm hover:border-slate-300 transition-colors cursor-pointer flex items-center justify-between"
+          style={{ borderColor: BORDER }}
+        >
+          <div>
+            <p className="text-[10px] font-bold uppercase text-slate-500">Active Cascades</p>
+            <p className={`text-xl font-bold mt-0.5 ${activeCascadesCount > 0 ? 'text-red-600' : 'text-slate-900'}`}>
+              {activeCascadesCount}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Cross-endpoint bursts</p>
+          </div>
+          <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center">
+            <Radio className="w-4 h-4" />
+          </div>
+        </div>
+
+        <div
+          onClick={() => router.push('/threat-intel')}
+          className="bg-white border rounded-[10px] p-4 shadow-sm hover:border-slate-300 transition-colors cursor-pointer flex items-center justify-between"
+          style={{ borderColor: BORDER }}
+        >
+          <div>
+            <p className="text-[10px] font-bold uppercase text-slate-500">CTI Threat Matches</p>
+            <p className={`text-xl font-bold mt-0.5 ${ctiMatchCount > 0 ? 'text-amber-600' : 'text-slate-900'}`}>
+              {ctiMatchCount}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Known malicious IOCs</p>
+          </div>
+          <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
+            <Database className="w-4 h-4" />
+          </div>
+        </div>
       </div>
 
       {/* Charts row */}
